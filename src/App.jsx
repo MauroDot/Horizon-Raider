@@ -67,6 +67,17 @@ function App() {
 
   useEffect(() => () => audioManager.dispose(), [audioManager])
 
+  // Dev convenience only: lets someone drop a new file into public/audio
+  // mid-session and run `window.__audioManager.clearMissingCache()` in the
+  // browser console to pick it up without a full reload (see
+  // public/audio/README.md). Not read by any game code.
+  useEffect(() => {
+    window.__audioManager = audioManager
+    return () => {
+      if (window.__audioManager === audioManager) delete window.__audioManager
+    }
+  }, [audioManager])
+
   return (
     <>
       {mode === GameMode.MENU ? (

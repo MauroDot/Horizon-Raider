@@ -23,11 +23,14 @@ const SFX_DIR = 'audio/sfx'
 export const MUSIC_MANIFEST = {
   menu: { base: `${MUSIC_DIR}/menu` },
   freeplay: { base: `${MUSIC_DIR}/freeplay` },
-  'mission-ch1': { base: `${MUSIC_DIR}/mission-ch1` },
-  'mission-ch2': { base: `${MUSIC_DIR}/mission-ch2` },
-  'mission-ch3': { base: `${MUSIC_DIR}/mission-ch3` },
-  'mission-ch4': { base: `${MUSIC_DIR}/mission-ch4` },
-  'mission-ch5': { base: `${MUSIC_DIR}/mission-ch5` },
+  // Internal keys stay 'mission-chN' (musicKeyForChapter builds/looks these
+  // up dynamically from chapterId) - only the file each resolves to is
+  // named 'chapter-N.mp3' to match the project's audio-file convention.
+  'mission-ch1': { base: `${MUSIC_DIR}/chapter-1` },
+  'mission-ch2': { base: `${MUSIC_DIR}/chapter-2` },
+  'mission-ch3': { base: `${MUSIC_DIR}/chapter-3` },
+  'mission-ch4': { base: `${MUSIC_DIR}/chapter-4` },
+  'mission-ch5': { base: `${MUSIC_DIR}/chapter-5` },
   boss: { base: `${MUSIC_DIR}/boss`, layer: `${MUSIC_DIR}/boss-intense` },
   'boss-final': { base: `${MUSIC_DIR}/boss-final`, layer: `${MUSIC_DIR}/boss-final-intense` },
   victory: { base: `${MUSIC_DIR}/victory` },
@@ -52,9 +55,9 @@ export const SFX_MANIFEST = {
   explosionLarge: `${SFX_DIR}/explosion-large`,
   enemyDestroyed: `${SFX_DIR}/enemy-destroyed`,
   uiClick: `${SFX_DIR}/ui-click`,
-  uiBeep: `${SFX_DIR}/ui-beep`,
+  uiError: `${SFX_DIR}/ui-error`,
   missionComplete: `${SFX_DIR}/mission-complete`,
-  missionFail: `${SFX_DIR}/mission-fail`,
+  missionFail: `${SFX_DIR}/mission-failed`,
   levelUp: `${SFX_DIR}/level-up`,
 }
 

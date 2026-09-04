@@ -432,7 +432,7 @@ function PresetsView({ controlConfig, onBack }) {
 
 // Unified pause / settings menu. Pause is the entry point since there's no
 // separate title screen to hang a menu off of otherwise.
-export function GameMenu({ controlConfig, gamepadManager, onResume }) {
+export function GameMenu({ controlConfig, gamepadManager, audioManager, onResume }) {
   useControlConfigVersion(controlConfig)
   const [view, setView] = useState('pause')
   const [conflict, setConflict] = useState(null)
@@ -492,6 +492,9 @@ export function GameMenu({ controlConfig, gamepadManager, onResume }) {
         )}
         {view === 'mouseCamera' && <MouseCameraView controlConfig={controlConfig} onBack={() => setView('settings')} />}
         {view === 'presets' && <PresetsView controlConfig={controlConfig} onBack={() => setView('settings')} />}
+        {view === 'audio' && (
+          <AudioSettingsView controlConfig={controlConfig} audioManager={audioManager} onBack={() => setView('settings')} />
+        )}
       </div>
 
       {conflict && (
