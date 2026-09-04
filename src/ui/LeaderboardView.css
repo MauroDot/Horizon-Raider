@@ -1,0 +1,119 @@
+.leaderboard-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(640px, 94vw);
+  max-height: 84vh;
+}
+
+.leaderboard-view h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.14em;
+  color: #7fe9c0;
+}
+
+.leaderboard-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.leaderboard-tab {
+  flex: 1;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: #9fb8ab;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(120, 255, 200, 0.18);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.leaderboard-tab.active {
+  color: #0c1210;
+  background: #7fe9c0;
+  border-color: #7fe9c0;
+}
+
+.leaderboard-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #9fb8ab;
+  line-height: 1.5;
+}
+
+.leaderboard-table-wrap {
+  overflow-x: auto;
+  max-height: 50vh;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.leaderboard-table th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #ffce54;
+  background: #0d1613;
+  border-bottom: 1px solid rgba(120, 255, 200, 0.2);
+  white-space: nowrap;
+}
+
+.leaderboard-table td {
+  padding: 6px 10px;
+  color: #d7f5e8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+.leaderboard-table tr.you {
+  background: rgba(120, 255, 200, 0.09);
+}
+
+.leaderboard-table tr.you td:first-child,
+.leaderboard-table tr.you td:nth-child(2) {
+  color: #7fe9c0;
+  font-weight: 600;
+}
+
+.leaderboard-you-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: #0c1210;
+  background: #7fe9c0;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.leaderboard-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.leaderboard-actions button {
+  flex: 1;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #0c1210;
+  background: #7fe9c0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.leaderboard-clear {
+  background: rgba(255, 100, 80, 0.85) !important;
+  color: #1a0a08 !important;
+}

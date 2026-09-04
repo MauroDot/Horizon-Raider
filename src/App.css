@@ -1,0 +1,43 @@
+.game-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.game-viewport canvas {
+  display: block;
+  outline: none;
+}
+
+.input-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  padding: 8px 16px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  color: #0c1210;
+  background: #7fe9c0;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: toast-in-out 3s ease-in-out;
+}
+
+@keyframes toast-in-out {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  10%,
+  85% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}

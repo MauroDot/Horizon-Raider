@@ -1,0 +1,574 @@
+.hud {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  color: #d7f5e8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.hud-panel {
+  position: absolute;
+  background: rgba(8, 16, 14, 0.55);
+  border: 1px solid rgba(120, 255, 200, 0.25);
+  border-radius: 6px;
+  backdrop-filter: blur(2px);
+}
+
+.hud-instruments {
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 18px;
+  padding: 10px 16px;
+}
+
+.hud-clock {
+  font-size: 20px;
+}
+
+.hud-input-method {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 58px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #6b7a73;
+  opacity: 0.75;
+}
+
+.hud-input-method.connected {
+  color: #7fe9c0;
+}
+
+.hud-weapon-select {
+  font-size: 15px;
+}
+
+.hud-objective {
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+}
+
+/* An explicit `display` on the same element beats the browser's default
+   `[hidden] { display: none }` UA rule regardless of selector specificity
+   (author styles always win over UA styles) - without this, setting
+   `.hidden = true` on this element would have no visual effect. */
+.hud-objective[hidden] {
+  display: none;
+}
+
+.hud-objective .hud-label {
+  color: #ffce54;
+}
+
+.hud-objective-value {
+  font-size: 16px;
+}
+
+.hud-objective.alert {
+  border-color: rgba(255, 90, 70, 0.7);
+  background: rgba(60, 10, 8, 0.55);
+  animation: critical-pulse 0.8s ease-in-out infinite;
+}
+
+.hud-objective.alert .hud-label,
+.hud-objective.alert .hud-objective-value {
+  color: #ff6a5a;
+}
+
+.hud-boss-bar {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, 90vw);
+  padding: 8px 16px 10px;
+  background: rgba(20, 8, 6, 0.62);
+  border: 1px solid rgba(255, 90, 60, 0.45);
+  border-radius: 8px;
+  backdrop-filter: blur(2px);
+}
+
+.hud-boss-bar[hidden] {
+  display: none;
+}
+
+.hud-boss-bar.telegraph {
+  animation: critical-pulse 0.4s ease-in-out infinite;
+  border-color: rgba(255, 140, 40, 0.9);
+}
+
+.hud-boss-bar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.hud-boss-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #ff8a6a;
+}
+
+.hud-boss-phases {
+  display: flex;
+  gap: 5px;
+}
+
+.hud-boss-phase-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.hud-boss-phase-dot.passed {
+  background: rgba(255, 138, 106, 0.4);
+}
+
+.hud-boss-phase-dot.active {
+  background: #ff8a6a;
+  box-shadow: 0 0 6px rgba(255, 138, 106, 0.8);
+}
+
+.hud-boss-percent {
+  margin-left: auto;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #ffce9a;
+}
+
+.hud-boss-track {
+  height: 14px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 90, 60, 0.3);
+  overflow: hidden;
+}
+
+.hud-boss-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff2244, #ff8a4d);
+  transition: width 150ms linear;
+}
+
+.hud-warning {
+  position: absolute;
+  top: 210px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ff6a5a;
+  background: rgba(30, 4, 4, 0.7);
+  border: 1px solid rgba(255, 90, 70, 0.6);
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+  animation: critical-pulse 0.3s ease-in-out infinite;
+}
+
+.hud-warning:empty {
+  display: none;
+}
+
+.hud-warning.visible {
+  opacity: 1;
+}
+
+.hud-comm {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 70vw;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  color: #d7f5e8;
+  background: rgba(8, 16, 14, 0.6);
+  border: 1px solid rgba(120, 255, 200, 0.2);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+
+.hud-comm:empty {
+  display: none;
+}
+
+.hud-comm.visible {
+  opacity: 1;
+}
+
+.hud-minimap {
+  bottom: 16px;
+  right: 16px;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.hud-minimap canvas {
+  display: block;
+  border-radius: 50%;
+}
+
+.hud-combat {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  padding: 10px 16px;
+}
+
+.hud-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+}
+
+.hud-crosshair .dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 206, 84, 0.9);
+  transform: translate(-50%, -50%);
+}
+
+.hud-crosshair .tick {
+  position: absolute;
+  background: rgba(215, 245, 232, 0.85);
+}
+
+.hud-crosshair .tick-top,
+.hud-crosshair .tick-bottom {
+  left: 50%;
+  width: 2px;
+  height: 8px;
+  transform: translateX(-50%);
+}
+
+.hud-crosshair .tick-top {
+  top: 0;
+}
+
+.hud-crosshair .tick-bottom {
+  bottom: 0;
+}
+
+.hud-crosshair .tick-left,
+.hud-crosshair .tick-right {
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.hud-crosshair .tick-left {
+  left: 0;
+}
+
+.hud-crosshair .tick-right {
+  right: 0;
+}
+
+.hud-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+  min-width: 3.5em;
+}
+
+.hud-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #7fd9b6;
+  opacity: 0.85;
+}
+
+.hud-value {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-unit {
+  font-size: 10px;
+  color: #a9e8cf;
+  opacity: 0.75;
+}
+
+.hud-throttle {
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  width: 56px;
+}
+
+.hud-throttle-caption {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #7fd9b6;
+}
+
+.hud-throttle-track {
+  position: relative;
+  width: 14px;
+  height: 96px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(120, 255, 200, 0.2);
+  overflow: hidden;
+}
+
+.hud-throttle-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 0%;
+  background: linear-gradient(180deg, #ffce54, #35d68f);
+  transition: height 80ms linear;
+}
+
+.hud-throttle-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-ammo-caption {
+  margin-top: 6px;
+}
+
+.hud-ammo-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #ffce54;
+}
+
+.hud-boost-value {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.hud-boost-value.ready {
+  color: #35d68f;
+}
+
+.hud-boost-value.cooldown {
+  color: #6b7a73;
+}
+
+.hud-boost-value.active {
+  color: #ffce54;
+  animation: boost-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes boost-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.hud-damage-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(255, 0, 0, 0) 45%, rgba(200, 0, 0, 0.55) 100%);
+  opacity: 0;
+}
+
+.hud-damage-flash.flash {
+  animation: damage-flash 0.4s ease-out;
+}
+
+@keyframes damage-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.hud-health {
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+}
+
+.hud-health-track {
+  position: relative;
+  width: 150px;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(120, 255, 200, 0.2);
+  overflow: hidden;
+}
+
+.hud-health-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #35d68f, #ffce54);
+  transition: width 120ms linear;
+}
+
+.hud-health.critical .hud-health-fill {
+  background: linear-gradient(90deg, #ff4d4d, #ff8a4d);
+}
+
+.hud-health.critical {
+  animation: critical-pulse 1s ease-in-out infinite;
+}
+
+@keyframes critical-pulse {
+  0%,
+  100% {
+    border-color: rgba(120, 255, 200, 0.25);
+  }
+  50% {
+    border-color: rgba(255, 77, 77, 0.8);
+  }
+}
+
+.hud-health-value {
+  font-size: 16px;
+  min-width: 2.4em;
+  text-align: right;
+}
+
+.hud-badge {
+  position: absolute;
+  top: 128px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #12100a;
+  background: #ffce54;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.hud-boosters {
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.hud-booster-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 3.8em;
+  opacity: 0.55;
+}
+
+.hud-booster-slot.empty {
+  opacity: 0.3;
+}
+
+.hud-booster-slot.active {
+  opacity: 1;
+}
+
+.hud-booster-key {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #7fd9b6;
+  opacity: 0.85;
+}
+
+.hud-booster-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #bfeede;
+}
+
+.hud-booster-count {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #ffce54;
+}
+
+.hud-booster-slot.active .hud-booster-count {
+  color: #7fe9c0;
+  animation: boost-pulse 0.6s ease-in-out infinite;
+}
+
+.hud-controls {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  padding: 6px 14px;
+  font-size: 11px;
+  color: #bfeede;
+  background: rgba(8, 16, 14, 0.45);
+  border: 1px solid rgba(120, 255, 200, 0.18);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.hud-look-hint {
+  color: #ffce54;
+}
+
+@media (max-width: 640px) {
+  .hud-controls {
+    flex-wrap: wrap;
+    white-space: normal;
+    max-width: 92vw;
+    justify-content: center;
+    border-radius: 10px;
+  }
+}
