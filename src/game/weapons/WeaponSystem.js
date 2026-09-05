@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { getTerrainHeight } from '../terrainHeight.js'
 import { createMissileMesh } from './missileModel.js'
+import { CRITICAL_HIT_FRACTION } from '../score.js'
 
 const GUN_DAMAGE = 10
 const GUN_RANGE = 260
@@ -126,6 +127,7 @@ export class WeaponSystem {
 
     let closestT = Infinity
     let closestEnemy = null
+    let closestMissDistSq = 0
     for (const enemy of this.enemyManager.getAliveEnemies()) {
       const toEnemy = enemy.mesh.position.clone().sub(muzzle)
       const t = toEnemy.dot(dir)
@@ -135,6 +137,7 @@ export class WeaponSystem {
       if (distSq <= enemy.hitRadius * enemy.hitRadius && t < closestT) {
         closestT = t
         closestEnemy = enemy
+        closestMissDistSq = distSq
       }
     }
 
@@ -144,9 +147,16 @@ export class WeaponSystem {
       this.effects.addImpactSpark(hitPoint)
       this.score.recordHit('gun')
       this.onImpact?.(0.15)
-      const gunDamage = GUN_DAMAGE * this.damageMultiplier * this.boostDamageMultiplier
+      // A shot through the middle of the hit sphere is a "critical" -
+      // extra damage and score. Spherical hit volumes mean there's no head
+      // to hit, so precision is the honest stand-in (see score.js).
+      const critRadius = closestEnemy.hitRadius * CRITICAL_HIT_FRACTION
+      const critical = closestMissDistSq <= critRadius * critRadius
+      const gunDamage =
+        GUN_DAMAGE * this.damageMultiplier * this.boostDamageMultiplier * (critical ? 1.5 : 1)
+      if (critical) this.effects.addCriticalFlash(hitPoint)
       if (this.enemyManager.damageEnemy(closestEnemy, gunDamage)) {
-        this._onKill(closestEnemy, 'gun')
+        this._onKill(closestEnemy, 'gun', { critical })
       }
     } else {
       this.effects.addTracer(muzzle, muzzle.clone().addScaledVector(dir, GUN_RANGE))
@@ -283,13 +293,14 @@ export class WeaponSystem {
       const expired = missile.life > MISSILE_LIFETIME
 
       if (hitEnemy || hitGround || expired) {
-        this._explodeMissile(missile, hitEnemy)
+        this._explodeMissile(missile, hitEnemy, { hitGround })
         this.missiles.splice(i, 1)
       }
     }
   }
 
-  _explodeMissile(missile, hitEnemy) {
+  _explodeMissile(missile, hitEnemy, { hitGround = false } = {}) {
+    if (hitGround) this.effects.addGroundDust(missile.position.clone(), { scale: 1.4 })
     this.scene.remove(missile.mesh)
     missile.mesh.material.dispose()
     this.effects.addExplosion(missile.position.clone(), { scale: hitEnemy ? 1.4 : 1 })
@@ -305,8 +316,8 @@ export class WeaponSystem {
     }
   }
 
-  _onKill(enemy, weapon) {
-    this.score.addKill(weapon, enemy.type)
+  _onKill(enemy, weapon, { critical = false } = {}) {
+    this.score.addKill(weapon, enemy.type, { critical })
     this.audioManager?.playSfx('enemyDestroyed')
     this.effects.addExplosion(enemy.mesh.position.clone(), {
       scale: enemy.isBoss ? 3 : enemy.type === 'vehicle' ? 1.3 : 1,

@@ -162,6 +162,7 @@ export class EnemyWeaponSystem {
           hitTarget.onHit?.(projectile.damage)
         } else if (hitGround) {
           this.effects.addImpactSpark(projectile.position.clone())
+          this.effects.addGroundDust(projectile.position.clone(), { scale: 0.7 })
         }
       }
     }

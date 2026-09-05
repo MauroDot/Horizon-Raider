@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ControlConfig } from './game/controlConfig.js'
 import { GamepadManager } from './game/gamepad/gamepadManager.js'
 import { AudioManager } from './game/audio/audioManager.js'
+import { applyDisplaySettings } from './game/displaySettings.js'
 import { useGameStore, GameMode } from './state/gameStore.js'
 import { MainMenu } from './ui/MainMenu.jsx'
 import { GameScreen } from './ui/GameScreen.jsx'
@@ -44,6 +45,14 @@ function App() {
   // for controlConfig. Browsers block audio until a user gesture, so the
   // context itself only actually starts producing sound after the first
   // click/keydown resumes it (same convention as engineSound.js's start()).
+  // Accessibility settings are pure presentation - push them onto <html>
+  // on boot and on every change so CSS picks them up immediately.
+  useEffect(() => {
+    const apply = () => applyDisplaySettings(controlConfig.settings)
+    apply()
+    return controlConfig.subscribe(apply)
+  }, [controlConfig])
+
   useEffect(() => {
     const applyAudioSettings = () => {
       const s = controlConfig.settings
@@ -82,7 +91,11 @@ function App() {
   return (
     <>
       {mode === GameMode.MENU ? (
-        <MainMenu audioManager={audioManager} />
+        <MainMenu
+          controlConfig={controlConfig}
+          gamepadManager={gamepadManager}
+          audioManager={audioManager}
+        />
       ) : (
         <GameScreen controlConfig={controlConfig} gamepadManager={gamepadManager} audioManager={audioManager} />
       )}

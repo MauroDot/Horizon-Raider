@@ -15,3 +15,68 @@ body {
   background: #0b1220;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
+
+/* --- Accessibility ------------------------------------------------------
+   Set as data attributes on <html> by displaySettings.applyDisplaySettings.
+   Text size drives a single --ui-scale that the HUD and menus multiply
+   their font sizes by, so one knob moves everything without restyling each
+   panel. */
+:root {
+  --ui-scale: 1;
+
+  /* Semantic colours - remapped per colourblind mode below. Only the three
+     that actually carry meaning (hostile / friendly / objective) change. */
+  --c-hostile: #ff6a5a;
+  --c-hostile-alt: #ff9a3a;
+  --c-friendly: #7fe9c0;
+  --c-objective: #ffce54;
+}
+
+html[data-text-size='large'] {
+  --ui-scale: 1.15;
+}
+
+html[data-text-size='larger'] {
+  --ui-scale: 1.32;
+}
+
+/* Deuteranopia / protanopia: pull the hostile cue off red-vs-green onto
+   orange-vs-white, and move objectives to blue. */
+html[data-colorblind='deuteranopia'] {
+  --c-hostile: #ff8c1a;
+  --c-hostile-alt: #d94fd9;
+  --c-friendly: #ffffff;
+  --c-objective: #4fc3ff;
+}
+
+html[data-colorblind='protanopia'] {
+  --c-hostile: #ffa61a;
+  --c-hostile-alt: #c46bff;
+  --c-friendly: #ffffff;
+  --c-objective: #3fb9ff;
+}
+
+/* Tritanopia: blue/yellow is the weak axis, so objectives move to teal. */
+html[data-colorblind='tritanopia'] {
+  --c-hostile: #ff4d6d;
+  --c-hostile-alt: #ff9ec4;
+  --c-friendly: #ffffff;
+  --c-objective: #00c2a8;
+}
+
+/* Motion-sickness mode: kill the pulsing/flashing HUD animations. The
+   camera side of it (no FOV kick, damped follow) is handled in
+   createScene.js, since that's simulation state rather than styling. */
+html[data-reduced-motion='on'] .hud-damage-flash,
+html[data-reduced-motion='on'] .hud-warning,
+html[data-reduced-motion='on'] .hud-boss-bar.telegraph,
+html[data-reduced-motion='on'] .hud-objective.alert,
+html[data-reduced-motion='on'] .hud-health.critical,
+html[data-reduced-motion='on'] .gimbal-rings,
+html[data-reduced-motion='on'] .hud-booster-slot.active .hud-booster-count {
+  animation: none !important;
+}
+
+html[data-reduced-motion='on'] .hud-damage-flash {
+  opacity: 0 !important;
+}

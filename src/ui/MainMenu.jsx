@@ -3,12 +3,14 @@ import { useGameStore } from '../state/gameStore.js'
 import { usePersistentStore } from '../state/persistentStore.js'
 import { getMissionIndex, getMissionsForChapter } from '../game/campaign/missions.js'
 import { CHAPTERS } from '../game/campaign/chapters.js'
+import { DIFFICULTIES } from '../game/campaign/difficulty.js'
 import { LeaderboardView } from './LeaderboardView.jsx'
 import { SaveGameView } from './SaveGameView.jsx'
 import { LoadoutView } from './LoadoutView.jsx'
 import { PilotSummary } from './PilotSummary.jsx'
 import { MissionBriefing } from './MissionBriefing.jsx'
 import { Stars } from './Stars.jsx'
+import { GameMenu } from './GameMenu.jsx'
 import './MainMenu.css'
 
 function formatPlaytime(totalSeconds) {
@@ -104,8 +106,11 @@ function CampaignView({ onBack }) {
 // a real music/menu.mp3 exists - see audioManifest.js) and plays a click
 // SFX on the primary mode buttons - representative wiring for "UI clicks,
 // beeps" rather than instrumenting literally every button in the app.
-export function MainMenu({ audioManager }) {
+export function MainMenu({ controlConfig, gamepadManager, audioManager }) {
   const [view, setView] = useState('root')
+  const [freePlayDifficulty, setFreePlayDifficulty] = useState(
+    () => controlConfig?.settings.defaultDifficulty ?? 'normal',
+  )
   const startFreePlay = useGameStore((s) => s.startFreePlay)
   const stats = usePersistentStore((s) => s.stats)
 
@@ -127,6 +132,17 @@ export function MainMenu({ audioManager }) {
     )
   }
   if (view === 'loadout') return <div className="main-menu"><LoadoutView onBack={() => setView('root')} /></div>
+  if (view === 'settings') {
+    return (
+      <GameMenu
+        controlConfig={controlConfig}
+        gamepadManager={gamepadManager}
+        audioManager={audioManager}
+        standalone
+        onClose={() => setView('root')}
+      />
+    )
+  }
   if (view === 'saves') return <div className="main-menu"><SaveGameView onBack={() => setView('root')} /></div>
 
   return (
@@ -137,10 +153,33 @@ export function MainMenu({ audioManager }) {
         <PilotSummary />
 
         <div className="main-menu-modes">
-          <button type="button" className="main-menu-mode" onClick={click(startFreePlay)}>
-            <span className="main-menu-mode-title">FREE PLAY</span>
-            <span className="main-menu-mode-desc">Sandbox. Unlimited enemies, no objectives.</span>
-          </button>
+          {/* A div, not a button: the difficulty chips are real buttons and
+              nesting a button inside a button is invalid HTML. The launch
+              button below fills the card, the chips sit beside it. */}
+          <div className="main-menu-mode main-menu-mode-freeplay">
+            <button
+              type="button"
+              className="main-menu-mode-launch"
+              onClick={click(() => startFreePlay(freePlayDifficulty))}
+            >
+              <span className="main-menu-mode-title">FREE PLAY</span>
+              <span className="main-menu-mode-desc">
+                Endless waves, no objectives. Survive and rack up score.
+              </span>
+            </button>
+            <div className="main-menu-difficulty">
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={`main-menu-difficulty-chip${freePlayDifficulty === d.id ? ' selected' : ''}`}
+                  onClick={() => setFreePlayDifficulty(d.id)}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <button type="button" className="main-menu-mode" onClick={click(() => setView('campaign'))}>
             <span className="main-menu-mode-title">CAMPAIGN</span>
             <span className="main-menu-mode-desc">Story missions with progression.</span>
@@ -152,6 +191,10 @@ export function MainMenu({ audioManager }) {
           <button type="button" className="main-menu-mode" onClick={click(() => setView('leaderboard'))}>
             <span className="main-menu-mode-title">LEADERBOARD</span>
             <span className="main-menu-mode-desc">View and submit high scores.</span>
+          </button>
+          <button type="button" className="main-menu-mode" onClick={click(() => setView('settings'))}>
+            <span className="main-menu-mode-title">SETTINGS</span>
+            <span className="main-menu-mode-desc">Graphics, audio, controls, accessibility, credits.</span>
           </button>
           <button type="button" className="main-menu-mode" onClick={click(() => setView('saves'))}>
             <span className="main-menu-mode-title">SAVE FILES</span>

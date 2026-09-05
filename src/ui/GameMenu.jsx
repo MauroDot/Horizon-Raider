@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ACTIONS_BY_SCHEME, describeBinding } from '../game/controlConfig.js'
 import { BUTTON } from '../game/gamepad/gamepadManager.js'
+import { Slider } from './SettingsControls.jsx'
+import {
+  GraphicsSettingsView,
+  AccessibilitySettingsView,
+  GameSettingsView,
+  CreditsView,
+} from './SettingsViews.jsx'
 import './GameMenu.css'
 
 const BUTTON_NAMES = Object.keys(BUTTON)
@@ -94,13 +101,16 @@ function useRebindCapture(onCaptured, gamepadManager) {
   return [capturing, setCapturing]
 }
 
-function PauseView({ onResume, onSettings }) {
+function PauseView({ onResume, onSettings, onQuit }) {
   return (
     <>
       <h1>PAUSED</h1>
       <div className="game-menu-actions">
         <button type="button" onClick={onResume}>
           Resume
+        </button>
+        <button type="button" onClick={onQuit}>
+          End Run &amp; Save Score
         </button>
         <button type="button" onClick={onSettings}>
           Settings
@@ -137,6 +147,18 @@ function SettingsView({ controlConfig, onBack, onNavigate }) {
         </button>
         <button type="button" className="game-menu-list-item" onClick={() => onNavigate('audio')}>
           Audio
+        </button>
+        <button type="button" className="game-menu-list-item" onClick={() => onNavigate('graphics')}>
+          Graphics
+        </button>
+        <button type="button" className="game-menu-list-item" onClick={() => onNavigate('accessibility')}>
+          Accessibility
+        </button>
+        <button type="button" className="game-menu-list-item" onClick={() => onNavigate('game')}>
+          Game
+        </button>
+        <button type="button" className="game-menu-list-item" onClick={() => onNavigate('credits')}>
+          Credits
         </button>
       </div>
       <div className="game-menu-actions">
@@ -203,16 +225,6 @@ function BindingList({ controlConfig, gamepad, capturing, onStartCapture, onBack
         </button>
       </div>
     </>
-  )
-}
-
-function Slider({ label, value, min = 0, max = 1, step = 0.01, onChange, format }) {
-  return (
-    <div className="game-menu-slider-row">
-      <span>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <span className="game-menu-slider-value">{format ? format(value) : Math.round(value * 100) + '%'}</span>
-    </div>
   )
 }
 
@@ -483,9 +495,20 @@ function PresetsView({ controlConfig, onBack }) {
 
 // Unified pause / settings menu. Pause is the entry point since there's no
 // separate title screen to hang a menu off of otherwise.
-export function GameMenu({ controlConfig, gamepadManager, audioManager, onResume }) {
+// `standalone` opens straight into Settings with no pause layer behind it,
+// which is how the Main Menu reuses this exact screen - one settings
+// implementation rather than a menu copy and an in-game copy that drift.
+export function GameMenu({
+  controlConfig,
+  gamepadManager,
+  audioManager,
+  onResume,
+  onQuit,
+  standalone = false,
+  onClose,
+}) {
   useControlConfigVersion(controlConfig)
-  const [view, setView] = useState('pause')
+  const [view, setView] = useState(standalone ? 'settings' : 'pause')
   const [conflict, setConflict] = useState(null)
 
   const handleCaptured = useCallback(
@@ -514,9 +537,13 @@ export function GameMenu({ controlConfig, gamepadManager, audioManager, onResume
   return (
     <div className="game-menu">
       <div className="game-menu-panel">
-        {view === 'pause' && <PauseView onResume={onResume} onSettings={() => setView('settings')} />}
+        {view === 'pause' && <PauseView onResume={onResume} onSettings={() => setView('settings')} onQuit={onQuit} />}
         {view === 'settings' && (
-          <SettingsView controlConfig={controlConfig} onBack={() => setView('pause')} onNavigate={setView} />
+          <SettingsView
+            controlConfig={controlConfig}
+            onBack={standalone ? onClose : () => setView('pause')}
+            onNavigate={setView}
+          />
         )}
         {view === 'keyboard' && (
           <BindingList
@@ -543,6 +570,14 @@ export function GameMenu({ controlConfig, gamepadManager, audioManager, onResume
         )}
         {view === 'mouseCamera' && <MouseCameraView controlConfig={controlConfig} onBack={() => setView('settings')} />}
         {view === 'presets' && <PresetsView controlConfig={controlConfig} onBack={() => setView('settings')} />}
+        {view === 'graphics' && (
+          <GraphicsSettingsView controlConfig={controlConfig} onBack={() => setView('settings')} />
+        )}
+        {view === 'accessibility' && (
+          <AccessibilitySettingsView controlConfig={controlConfig} onBack={() => setView('settings')} />
+        )}
+        {view === 'game' && <GameSettingsView controlConfig={controlConfig} onBack={() => setView('settings')} />}
+        {view === 'credits' && <CreditsView onBack={() => setView('settings')} />}
         {view === 'audio' && (
           <AudioSettingsView controlConfig={controlConfig} audioManager={audioManager} onBack={() => setView('settings')} />
         )}

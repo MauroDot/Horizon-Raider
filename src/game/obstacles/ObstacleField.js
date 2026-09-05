@@ -37,6 +37,17 @@ const OBJECTIVE_NAMES = ['Objective Alpha', 'Objective Bravo', 'Objective Charli
 
 const PLAYER_COLLISION_RADIUS = 2.2
 
+// Distance-based level of detail. Three.js frustum-culls what's off-screen
+// on its own, but everything in front of the player still gets drawn no
+// matter how far away it is, and this map is large enough that a straight
+// view can hold every cluster at once. Beyond LOD_HIDE_DISTANCE an obstacle
+// is hidden outright - it's smaller than a pixel or two and lost in fog at
+// that range anyway (the fog far plane is a Graphics setting, and its
+// maximum is below this). Between the two thresholds the moving parts stop
+// animating, which is the expensive half.
+const LOD_ANIMATE_DISTANCE = 320
+const LOD_HIDE_DISTANCE = 1500
+
 function place(scene, mesh, x, z, colliders) {
   mesh.position.set(x, getTerrainHeight(x, z), z)
   scene.add(mesh)
@@ -226,6 +237,17 @@ export class ObstacleField {
 
   update(delta, playerPosition) {
     for (const mesh of this.meshes) {
+      if (playerPosition) {
+        const dx = mesh.position.x - playerPosition.x
+        const dz = mesh.position.z - playerPosition.z
+        const distanceSq = dx * dx + dz * dz
+        mesh.visible = distanceSq <= LOD_HIDE_DISTANCE * LOD_HIDE_DISTANCE
+        // Far-but-visible props keep their geometry and drop their
+        // animation - a dish rotating 800m away is invisible motion that
+        // still costs a matrix update every frame.
+        if (!mesh.visible || distanceSq > LOD_ANIMATE_DISTANCE * LOD_ANIMATE_DISTANCE) continue
+      }
+
       const ring = mesh.userData.ring
       if (ring) ring.rotation.z += delta * 0.6
 

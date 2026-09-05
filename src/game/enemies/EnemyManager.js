@@ -17,6 +17,13 @@ const SPAWN_MIN_RADIUS = 100
 const SPAWN_MAX_RADIUS = Math.min(AIRSPACE.halfExtent - 40, 600)
 const RESPAWN_INTERVAL = 4 // seconds between free-play replacement spawns, paced so it doesn't swarm
 
+// Bosses take their health from this fixed base rather than their airframe's,
+// so bossHealthMultiplier means the same thing for every boss. The variant is
+// a *cosmetic* choice (BossController drives boss movement with its own speed
+// and turn constants), and letting a scout airframe silently give a boss a
+// fifth of a transport boss's health made chapter 3 far weaker than chapter 2.
+const BOSS_BASE_HEALTH = 35
+
 const PATROL_RADIUS = 20 // how far a not-yet-alerted recon enemy orbits its spawn point
 const PATROL_ORBIT_RATE = 0.3
 
@@ -75,7 +82,11 @@ const VEHICLE_VARIANTS = [
   },
 ]
 
-function pickWeighted(list) {
+function pickWeighted(list, allowed) {
+  if (allowed?.length) {
+    const filtered = list.filter((item) => allowed.includes(item.variant))
+    if (filtered.length) list = filtered
+  }
   const total = list.reduce((sum, item) => sum + item.weight, 0)
   let roll = Math.random() * total
   for (const item of list) {
@@ -151,8 +162,8 @@ export class EnemyManager {
     for (let i = 0; i < vehicleCount; i++) this._spawnVehicle()
   }
 
-  _spawnHelicopter() {
-    const def = pickWeighted(HELI_VARIANTS)
+  _spawnHelicopter(allowed) {
+    const def = pickWeighted(HELI_VARIANTS, allowed)
     const mesh = def.build()
     const { x, z } = randomSpawnPoint()
     const y = getTerrainHeight(x, z) + 20 + Math.random() * 45
@@ -181,8 +192,8 @@ export class EnemyManager {
     })
   }
 
-  _spawnVehicle() {
-    const def = pickWeighted(VEHICLE_VARIANTS)
+  _spawnVehicle(allowed) {
+    const def = pickWeighted(VEHICLE_VARIANTS, allowed)
     const mesh = def.build()
     const { x, z } = randomSpawnPoint()
     const y = getTerrainHeight(x, z) + VEHICLE_CLEARANCE
@@ -206,6 +217,17 @@ export class EnemyManager {
       homeX: x,
       homeZ: z,
     })
+  }
+
+  // Spawns one Free Play wave in a single burst (see freePlayWaves.js).
+  // Unlike the steady trickle `respawn` does, this drops a whole group in
+  // at once and can be restricted to the enemy variants that wave has
+  // unlocked, so later waves introduce heavier types rather than the mix
+  // being identical from the first minute.
+  spawnWave({ helicopters = 0, vehicles = 0, heliVariants, vehicleVariants } = {}) {
+    for (let i = 0; i < helicopters; i++) this._spawnHelicopter(heliVariants)
+    for (let i = 0; i < vehicles; i++) this._spawnVehicle(vehicleVariants)
+    return helicopters + vehicles
   }
 
   // A single named, heavily-buffed unique enemy for a boss mission -
@@ -245,7 +267,7 @@ export class EnemyManager {
     mesh.userData.glowMaterials = glowMaterials
     _addBossPods(mesh, glowColor)
 
-    const health = def.health * this.healthMultiplier * healthMultiplier
+    const health = BOSS_BASE_HEALTH * this.healthMultiplier * healthMultiplier
     const enemy = {
       type: 'heli',
       variant: def.variant,

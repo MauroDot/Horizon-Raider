@@ -10,6 +10,7 @@ const TITLES = {
   missionComplete: 'MISSION COMPLETE',
   escortLost: 'ESCORT DESTROYED',
   detected: 'COVER BLOWN',
+  quit: 'SESSION ENDED',
 }
 
 const FAILURE_NOTES = {

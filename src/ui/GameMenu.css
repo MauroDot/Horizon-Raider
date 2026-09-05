@@ -311,3 +311,35 @@
   border-radius: 6px;
   cursor: pointer;
 }
+
+/* --- Credits ------------------------------------------------------------ */
+.game-menu-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.credits-title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.18em;
+  color: #7fe9c0;
+}
+
+.credits-heading {
+  margin: 12px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffce54;
+}
+
+.credits-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9fb8ab;
+}

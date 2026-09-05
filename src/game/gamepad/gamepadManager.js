@@ -75,8 +75,20 @@ export class GamepadManager {
       this.index = null
       this._notify(false, e.gamepad)
     }
+    this._attached = false
+    this._attach()
+  }
+
+  // React StrictMode replays mount/unmount in dev against this same
+  // app-lifetime singleton, so dispose() can run while the manager lives on.
+  // Detaching the connect listeners permanently would mean no gamepad ever
+  // registers again for the rest of the session - so attachment is tracked
+  // and poll() re-attaches if it finds itself detached.
+  _attach() {
+    if (this._attached) return
     window.addEventListener('gamepadconnected', this._onConnect)
     window.addEventListener('gamepaddisconnected', this._onDisconnect)
+    this._attached = true
   }
 
   updateSettings({ deadzone, sensitivity, triggerCurve, vibration, enabled } = {}) {
@@ -111,7 +123,18 @@ export class GamepadManager {
   // applied), a button/dpad boolean array, and raw button objects for
   // callers that need press-strength (not used yet, kept for headroom).
   poll() {
-    if (!this.enabled || this.index == null) return null
+    if (!this.enabled) return null
+    this._attach()
+    if (this.index == null) {
+      // Nothing has announced itself yet - the Gamepad API also exposes
+      // already-connected pads without an event once the page has had input,
+      // so adopt the first one present rather than waiting forever.
+      const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []
+      const found = [...pads].find((p) => p && p.connected)
+      if (!found) return null
+      this.index = found.index
+      this._neutral = null
+    }
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []
     const pad = pads[this.index]
     if (!pad) {
@@ -181,5 +204,6 @@ export class GamepadManager {
   dispose() {
     window.removeEventListener('gamepadconnected', this._onConnect)
     window.removeEventListener('gamepaddisconnected', this._onDisconnect)
+    this._attached = false
   }
 }

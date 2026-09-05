@@ -22,8 +22,16 @@ export const useGameStore = create((set, get) => ({
   activeDifficultyId: 'normal', // chosen on the mission briefing screen; irrelevant (left as-is) for Free Play
   lastRunStats: null, // { kills, score, accuracy, outcome, missionId, secondaryComplete, healthFraction, ... }
 
-  startFreePlay: () =>
-    set({ mode: GameMode.FREE_PLAY, previousMode: null, activeMissionId: null, lastRunStats: null }),
+  // Free Play takes a difficulty too (sandbox, so all tiers are always
+  // available - the campaign's per-mission unlock rules don't apply here).
+  startFreePlay: (difficultyId = 'normal') =>
+    set({
+      mode: GameMode.FREE_PLAY,
+      previousMode: null,
+      activeMissionId: null,
+      activeDifficultyId: difficultyId,
+      lastRunStats: null,
+    }),
 
   startMission: (missionId, difficultyId = 'normal') =>
     set({

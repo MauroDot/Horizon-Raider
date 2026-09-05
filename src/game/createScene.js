@@ -26,6 +26,8 @@ import { BossController } from './bossController.js'
 import { BossHazards } from './bossHazards.js'
 import { DestructibleCover } from './destructibleCover.js'
 import { BossMusic } from './audio/bossMusic.js'
+import { WaveDirector } from './freePlayWaves.js'
+import { ScreenShake } from './screenShake.js'
 import { musicKeyForChapter } from './audio/audioManifest.js'
 
 const FLARE_DURATION = 3
@@ -59,7 +61,15 @@ const AMBIENT_ROSTER = {
 
 function buildEnemyManager(scene, { runMode, mission, difficulty }) {
   if (runMode === 'freeplay') {
-    return new EnemyManager(scene, { helicopterCount: 10, vehicleCount: 10, respawn: true })
+    // Starts empty: WaveDirector drops wave 1 on the first tick and every
+    // WAVE_INTERVAL_SECONDS after, so waves are the single source of
+    // hostiles rather than competing with the steady respawn trickle.
+    return new EnemyManager(scene, {
+      helicopterCount: 0,
+      vehicleCount: 0,
+      respawn: false,
+      healthMultiplier: difficulty.enemyHealthMultiplier,
+    })
   }
 
   const scale = (n) => Math.max(1, Math.round(n * difficulty.enemyCountMultiplier))
@@ -257,7 +267,9 @@ export function initGame(
   window.addEventListener('keydown', startAudio)
   renderer.domElement.addEventListener('mousedown', startAudio)
 
-  const effects = new EffectsManager(scene, audioManager)
+  const effects = new EffectsManager(scene, audioManager, {
+    intensity: controlConfig.settings.particleIntensity ?? 1,
+  })
   const score = new ScoreTracker()
   const enemyManager = buildEnemyManager(scene, { runMode, mission, difficulty })
 
@@ -332,6 +344,18 @@ export function initGame(
     surviveRemaining = mission.surviveSeconds
   }
 
+  // Free Play only: the wave clock. Missions have authored rosters.
+  const waveDirector =
+    runMode === 'freeplay'
+      ? new WaveDirector(enemyManager, {
+          countMultiplier: difficulty.enemyCountMultiplier,
+          onWave: (wave) => {
+            hudRef?.current?.showComm?.(`Wave ${wave} inbound.`)
+            audioManager?.playSfx('uiClick')
+          },
+        })
+      : null
+
   const weapons = new WeaponSystem({
     scene,
     helicopter,
@@ -364,6 +388,7 @@ export function initGame(
       damageReduction: () => destructibleCover?.damageReductionAt(flightModel.position) ?? 0,
       onHit: (damage) => {
         hudRef?.current?.flashDamage?.()
+        screenShake.add(THREE.MathUtils.clamp(damage / 45, 0.12, 0.5))
         gamepadManager?.rumble(THREE.MathUtils.clamp(damage / 20, 0.3, 1), 200)
       },
     },
@@ -380,7 +405,28 @@ export function initGame(
     targets: weaponTargets,
     accuracy: difficulty.enemyAccuracy,
   })
+  const screenShake = new ScreenShake()
+  // Emits the trailing damage smoke while the player is hurt - paced on a
+  // timer so the trail follows the aircraft rather than being a one-shot
+  // puff at the moment of impact.
+  let damageSmokeTimer = 0
+
+  // Vertical load factor for the HUD G-meter. Derived from how fast the
+  // vertical velocity is changing, expressed in g and offset by 1 so level
+  // flight reads 1.0g like a real accelerometer. Smoothed, because raw
+  // per-frame acceleration is far too noisy to read.
+  // Damage smoke leaves the engine deck, behind and above the fuselage -
+  // emitting it at the aircraft origin puts it directly on the camera in
+  // cockpit view, where it reads as blobs hanging in the sky rather than a
+  // trail coming off the airframe.
+  const DAMAGE_SMOKE_OFFSET = new THREE.Vector3(0, 0.5, -1.6)
+  const damageSmokePoint = new THREE.Vector3()
+
+  let previousVerticalSpeed = 0
+  let gForce = 1
+
   let gameOverTriggered = false
+  let requestedOutcome = null
   const celestialDir = new THREE.Vector3()
   const SUN_DISTANCE = 300
 
@@ -395,6 +441,7 @@ export function initGame(
     crashCooldown = CRASH_COOLDOWN_SECONDS
     const damage = THREE.MathUtils.clamp(30 + (impactSpeed - threshold) * 5, 30, 100)
     playerHealth.takeDamage(damage)
+    screenShake.add(THREE.MathUtils.clamp(damage / 60, 0.25, 0.8))
     effects.addExplosion(flightModel.position.clone(), { scale: 1.1 })
     hudRef?.current?.flashDamage?.()
     gamepadManager?.rumble(1, 300)
@@ -453,6 +500,45 @@ export function initGame(
     }
   }
 
+  // Graphics/accessibility settings that touch the 3D scene. Applied now
+  // and re-applied on every settings change, so the sliders take effect
+  // during a flight instead of only on the next launch.
+  const SHADOW_MAP_SIZES = { off: 0, low: 512, medium: 1024, high: 2048 }
+  function applySceneSettings() {
+    const st = controlConfig.settings
+
+    // Draw distance: 0..1 across a usable fog/far-plane range. Fog near is
+    // kept proportional so haze doesn't pile up right in front of the nose
+    // at low settings.
+    const far = THREE.MathUtils.lerp(700, 3000, THREE.MathUtils.clamp(st.drawDistance ?? 0.5, 0, 1))
+    scene.fog.far = far
+    scene.fog.near = far * 0.12
+    camera.far = far + SKY_DOME_RADIUS
+    camera.updateProjectionMatrix()
+
+    const size = SHADOW_MAP_SIZES[st.shadowQuality] ?? 1024
+    renderer.shadowMap.enabled = size > 0
+    sunLight.castShadow = size > 0
+    if (size > 0 && sunLight.shadow.mapSize.width !== size) {
+      sunLight.shadow.mapSize.set(size, size)
+      // Force the existing shadow target to be rebuilt at the new size -
+      // three.js won't resize an already-allocated one on its own.
+      sunLight.shadow.map?.dispose()
+      sunLight.shadow.map = null
+    }
+
+    effects.intensity = st.particleIntensity ?? 1
+
+    // Objective/waypoint beacons can be hidden entirely.
+    const showMarkers = st.showObjectiveMarkers !== false
+    for (const marker of waypointMarkers) {
+      if (marker.userData.visited) continue
+      marker.visible = showMarkers
+    }
+  }
+  applySceneSettings()
+  const unsubscribeSettings = controlConfig.subscribe(applySceneSettings)
+
   const clock = new THREE.Clock()
   let rafId
 
@@ -471,6 +557,15 @@ export function initGame(
     engineSound.setMuted(false)
     engineSound.update({ throttleFraction: flightModel.throttleFraction, speed: flightModel.speed })
     playtimeSeconds += delta
+    score.update(delta)
+
+    if (delta > 0) {
+      const verticalAcceleration = (flightModel.velocity.y - previousVerticalSpeed) / delta
+      previousVerticalSpeed = flightModel.velocity.y
+      const instantaneous = 1 + verticalAcceleration / 9.81
+      gForce += (THREE.MathUtils.clamp(instantaneous, -2, 6) - gForce) * Math.min(1, delta * 6)
+    }
+    if (playerHealth.alive) waveDirector?.update(delta)
 
     if (!firedStart) {
       firedStart = true
@@ -532,6 +627,7 @@ export function initGame(
           const dist = Math.hypot(flightModel.position.x - wp.x, flightModel.position.z - wp.z)
           if (dist <= WAYPOINT_ARRIVAL_RADIUS) {
             waypointMarkers[reconIndex].visible = false
+            waypointMarkers[reconIndex].userData.visited = true
             reconIndex++
           }
         }
@@ -543,9 +639,46 @@ export function initGame(
         bossHazards.update(delta, playerTarget)
       }
     }
-    chaseCamera.update(delta, flightModel, controlConfig.settings.cameraSmoothing)
+    // Motion-sickness mode suppresses shake entirely - it is exactly the
+    // kind of camera motion that setting exists to remove.
+    const shakeEnabled = !controlConfig.settings.reducedMotion
+    screenShake.update(delta)
 
-    const fovBoost = MAX_FOV_BOOST * THREE.MathUtils.clamp(flightModel.speed / FOV_SPEED_REFERENCE, 0, 1)
+    // Visible damage state: below 60% hull the aircraft trails smoke, and
+    // the trail thickens as it gets worse.
+    const hullFraction = playerHealth.fraction
+    if (playerHealth.alive && hullFraction < 0.6) {
+      const severity = THREE.MathUtils.clamp(1 - hullFraction / 0.6, 0, 1)
+      damageSmokeTimer -= delta
+      if (damageSmokeTimer <= 0) {
+        damageSmokeTimer = 0.22 - severity * 0.12
+        damageSmokePoint
+          .copy(DAMAGE_SMOKE_OFFSET)
+          .applyQuaternion(helicopter.quaternion)
+          .add(helicopter.position)
+        effects.addDamageSmoke(damageSmokePoint.clone(), severity)
+        if (severity > 0.75 && Math.random() < 0.3) {
+          effects.addImpactSpark(damageSmokePoint.clone())
+        }
+      }
+    }
+
+    chaseCamera.update(
+      delta,
+      flightModel,
+      // Motion-sickness mode leans the follow camera toward its laziest
+      // setting, so it drifts after the aircraft instead of snapping.
+      controlConfig.settings.reducedMotion
+        ? Math.max(0.85, controlConfig.settings.cameraSmoothing)
+        : controlConfig.settings.cameraSmoothing,
+    )
+
+    const reducedMotion = !!controlConfig.settings.reducedMotion
+    if (shakeEnabled) screenShake.apply(camera)
+
+    const fovBoost = reducedMotion
+      ? 0
+      : MAX_FOV_BOOST * THREE.MathUtils.clamp(flightModel.speed / FOV_SPEED_REFERENCE, 0, 1)
     const targetFov = BASE_FOV + fovBoost
     if (chaseCamera.mode === 'chase' && Math.abs(camera.fov - targetFov) > 0.05) {
       camera.fov += (targetFov - camera.fov) * Math.min(1, delta * 3)
@@ -562,6 +695,7 @@ export function initGame(
       escortNPC.update(delta)
       if (escortNPC.currentIndex > 0 && waypointMarkers[escortNPC.currentIndex - 1]) {
         waypointMarkers[escortNPC.currentIndex - 1].visible = false
+        waypointMarkers[escortNPC.currentIndex - 1].userData.visited = true
       }
     }
     for (const marker of waypointMarkers) {
@@ -569,7 +703,10 @@ export function initGame(
     }
     effects.update(delta)
 
-    if (playerHealth.health < lastHealth) tookDamage = true
+    if (playerHealth.health < lastHealth) {
+      tookDamage = true
+      score.notifyDamaged()
+    }
     lastHealth = playerHealth.health
     if (!firedLowHealth && playerHealth.fraction <= LOW_HEALTH_FRACTION && playerHealth.alive) {
       firedLowHealth = true
@@ -628,7 +765,9 @@ export function initGame(
         return false
       }
 
-      if (!playerHealth.alive) {
+      if (requestedOutcome) {
+        finish(requestedOutcome)
+      } else if (!playerHealth.alive) {
         effects.addExplosion(helicopter.position.clone(), { scale: 1.6 })
         helicopter.visible = false
         finish('died')
@@ -755,6 +894,7 @@ export function initGame(
       health: playerHealth.health,
       healthFraction: playerHealth.fraction,
       clockLabel: dayNight.clockLabel,
+      gForce,
       playerX: flightModel.position.x,
       playerZ: flightModel.position.z,
       enemies: enemyManager.getAliveEnemies().map((e) => ({
@@ -762,7 +902,7 @@ export function initGame(
         z: e.mesh.position.z,
         type: e.type,
       })),
-      objectives: [
+      objectives: controlConfig.settings.showObjectiveMarkers === false ? [] : [
         ...obstacleField.getObjectives(),
         ...(reconWaypoints
           ?.map((p, i) => (i >= reconIndex ? { x: p.x, z: p.z, name: `Waypoint ${i + 1}` } : null))
@@ -792,6 +932,8 @@ export function initGame(
         : null,
       boosters: boosters.snapshot(),
       targeting,
+      sessionSeconds: playtimeSeconds,
+      freePlay: waveDirector ? waveDirector.snapshot() : null,
       ...score.snapshot(),
     })
 
@@ -811,6 +953,7 @@ export function initGame(
   function dispose() {
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', handleResize)
+    unsubscribeSettings()
     window.removeEventListener('keydown', startAudio)
     renderer.domElement.removeEventListener('mousedown', startAudio)
     engineSound.dispose()
@@ -840,5 +983,13 @@ export function initGame(
     }
   }
 
-  return { dispose }
+  // Lets the pause menu end a run deliberately - the score still goes
+  // through the same onRunEnd path (recorded, auto-saved, offered to the
+  // leaderboard) as dying would, rather than being thrown away.
+  function endRunNow(outcome = 'quit') {
+    if (gameOverTriggered) return
+    requestedOutcome = outcome
+  }
+
+  return { dispose, endRun: endRunNow }
 }

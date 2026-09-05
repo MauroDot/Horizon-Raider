@@ -309,6 +309,7 @@ export class BossController {
           target.health.takeDamage(damage)
           target.onHit?.(damage)
         }
+        if (hitGround) this.effects.addGroundDust(m.position.clone(), { scale: 1.2 })
         if (hitPlayer || hitGround) {
           this.effects.addExplosion(m.position.clone(), { scale: 0.6 })
           this.onExplosion?.(m.position.clone())

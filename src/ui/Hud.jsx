@@ -1,8 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
 import { describeBinding } from '../game/controlConfig.js'
+import { minimapPalette } from '../game/displaySettings.js'
 import './Hud.css'
 
 const clampPercent = (value) => Math.max(0, Math.min(100, value))
+
+// m/s bounds for the speed vignette - see its use in update().
+const SPEEDLINE_MIN = 10
+const SPEEDLINE_MAX = 30
+
+// Kills and score jump in discrete lumps (a kill is +1, +150 score). Writing
+// them straight to the DOM makes them pop; easing the *displayed* number
+// toward the real one gives the familiar count-up without ever showing a
+// wrong final value - it always converges exactly, and snaps if the gap is
+// tiny or the value went down (a new run resetting to 0).
+function makeCounter(initial = 0) {
+  return { shown: initial, target: initial }
+}
+
+function stepCounter(counter, target, delta, rate = 9) {
+  counter.target = target
+  if (target < counter.shown || Math.abs(target - counter.shown) < 0.51) {
+    counter.shown = target
+  } else {
+    counter.shown += (target - counter.shown) * Math.min(1, delta * rate)
+  }
+  return Math.round(counter.shown)
+}
+
+// Compass tape: 5 labelled ticks either side of the current heading.
+const COMPASS_POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+function compassLabel(deg) {
+  const d = ((deg % 360) + 360) % 360
+  if (d % 45 === 0) return COMPASS_POINTS[d / 45]
+  return String(d).padStart(3, '0')
+}
 
 function buildControlHints(controlConfig) {
   const b = (id) => describeBinding(controlConfig.getBinding(id))
@@ -92,7 +124,7 @@ const MINIMAP_BORDER = 'rgba(120, 255, 200, 0.35)'
 // matches the game's forward = (sin(yaw), cos(yaw)) convention, so a
 // player-triangle rotation of exactly `yaw` radians (see below) points it
 // the right way with no extra sign-flipping.
-function drawMinimap(ctx, { playerX, playerZ, yaw, enemies, objectives }) {
+function drawMinimap(ctx, { playerX, playerZ, yaw, enemies, objectives, palette }) {
   const half = MINIMAP_SIZE / 2
   const scale = half / MINIMAP_RANGE
 
@@ -115,7 +147,7 @@ function drawMinimap(ctx, { playerX, playerZ, yaw, enemies, objectives }) {
 
   const toMap = (x, z) => [half + (x - playerX) * scale, half - (z - playerZ) * scale]
 
-  ctx.fillStyle = '#ffce54'
+  ctx.fillStyle = palette.objective
   for (const o of objectives) {
     const [mx, my] = toMap(o.x, o.z)
     if (Math.hypot(mx - half, my - half) > half) continue
@@ -126,13 +158,22 @@ function drawMinimap(ctx, { playerX, playerZ, yaw, enemies, objectives }) {
     ctx.restore()
   }
 
+  // Blips pulse on a shared clock - a static dot grid is hard to read at a
+  // glance, a gentle sweep-style pulse makes contacts pop.
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 320)
   for (const e of enemies) {
     const [mx, my] = toMap(e.x, e.z)
     if (Math.hypot(mx - half, my - half) > half) continue
-    ctx.fillStyle = e.type === 'heli' ? '#ff6a5a' : '#ff9a3a'
+    ctx.fillStyle = e.type === 'heli' ? palette.heli : palette.vehicle
     ctx.beginPath()
     ctx.arc(mx, my, 3, 0, Math.PI * 2)
     ctx.fill()
+
+    ctx.globalAlpha = 0.35 * (1 - pulse)
+    ctx.beginPath()
+    ctx.arc(mx, my, 3 + pulse * 4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
   }
 
   ctx.restore()
@@ -146,7 +187,7 @@ function drawMinimap(ctx, { playerX, playerZ, yaw, enemies, objectives }) {
   ctx.save()
   ctx.translate(half, half)
   ctx.rotate(yaw)
-  ctx.fillStyle = '#7fe9c0'
+  ctx.fillStyle = palette.player
   ctx.beginPath()
   ctx.moveTo(0, -7)
   ctx.lineTo(5, 6)
@@ -177,6 +218,21 @@ export function Hud({ hudApiRef, controlConfig }) {
   const [showHints, setShowHints] = useState(controlConfig.settings.showHints)
   const [controlHints, setControlHints] = useState(() => buildControlHints(controlConfig))
   const [boosterKeys, setBoosterKeys] = useState(() => buildBoosterKeys(controlConfig))
+  // The canvas minimap can't read CSS custom properties, so the colourblind
+  // palette is mirrored into a ref here and refreshed by the same settings
+  // subscription below that drives the scheme/hint state.
+  const paletteRef = useRef(minimapPalette(controlConfig.settings.colorblindMode))
+  const killsCounterRef = useRef(makeCounter())
+  const scoreCounterRef = useRef(makeCounter())
+  // Seeded on the first update() rather than during render - reading the
+  // clock while rendering is an impure call.
+  const lastFrameRef = useRef(0)
+  const compassTapeRef = useRef(null)
+  const gForceFillRef = useRef(null)
+  const gForceValueRef = useRef(null)
+  const gForceRowRef = useRef(null)
+  const speedLinesRef = useRef(null)
+  const cockpitDamageRef = useRef(null)
   useEffect(
     () =>
       controlConfig.subscribe(() => {
@@ -184,6 +240,7 @@ export function Hud({ hudApiRef, controlConfig }) {
         setShowHints(controlConfig.settings.showHints)
         setControlHints(buildControlHints(controlConfig))
         setBoosterKeys(buildBoosterKeys(controlConfig))
+        paletteRef.current = minimapPalette(controlConfig.settings.colorblindMode)
       }),
     [controlConfig],
   )
@@ -226,6 +283,13 @@ export function Hud({ hudApiRef, controlConfig }) {
   const wasLockedRef = useRef(false)
   const breakLockTimeoutRef = useRef(null)
 
+  const freePlayPanelRef = useRef(null)
+  const waveValueRef = useRef(null)
+  const nextWaveRef = useRef(null)
+  const sessionTimeRef = useRef(null)
+  const multiplierRef = useRef(null)
+  const comboRef = useRef(null)
+
   const boosterSlotRefs = useRef({ shield: null, speed: null, weapon: null })
   const boosterCountRefs = useRef({ shield: null, speed: null, weapon: null })
   const bossPhaseDotRefs = useRef([])
@@ -243,10 +307,13 @@ export function Hud({ hudApiRef, controlConfig }) {
         inputMethod,
         gamepadConnected,
         radarVisible,
+        cameraMode,
         flareActive,
         flareReady,
         selectedWeapon,
         kills,
+        combo,
+        multiplier,
         score,
         accuracy,
         hostiles,
@@ -257,12 +324,15 @@ export function Hud({ hudApiRef, controlConfig }) {
         health,
         healthFraction,
         clockLabel,
+        gForce,
         playerX,
         playerZ,
         enemies,
         objectives,
         boosters,
         targeting,
+        sessionSeconds,
+        freePlay,
       }) {
         if (speedRef.current) speedRef.current.textContent = (speed * 3.6).toFixed(0)
         if (altitudeRef.current) altitudeRef.current.textContent = Math.max(0, altitude).toFixed(0)
@@ -291,8 +361,19 @@ export function Hud({ hudApiRef, controlConfig }) {
         }
         if (minimapPanelRef.current) minimapPanelRef.current.hidden = !radarVisible
 
-        if (killsRef.current) killsRef.current.textContent = String(kills)
-        if (scoreRef.current) scoreRef.current.textContent = String(score)
+        // Per-frame delta for the eased readouts. update() is called once
+        // per rAF tick, so measuring here keeps the easing framerate-independent.
+        const nowMs = performance.now()
+        if (!lastFrameRef.current) lastFrameRef.current = nowMs
+        const frameDelta = Math.min(0.1, (nowMs - lastFrameRef.current) / 1000)
+        lastFrameRef.current = nowMs
+
+        if (killsRef.current) {
+          killsRef.current.textContent = String(stepCounter(killsCounterRef.current, kills, frameDelta))
+        }
+        if (scoreRef.current) {
+          scoreRef.current.textContent = String(stepCounter(scoreCounterRef.current, score, frameDelta, 7))
+        }
         if (accuracyRef.current) accuracyRef.current.textContent = `${accuracy.toFixed(0)}%`
         if (hostilesRef.current) hostilesRef.current.textContent = String(hostiles)
         if (missileAmmoRef.current) {
@@ -314,7 +395,65 @@ export function Hud({ hudApiRef, controlConfig }) {
         if (healthValueRef.current) healthValueRef.current.textContent = Math.round(health)
         if (healthPanelRef.current) healthPanelRef.current.classList.toggle('critical', healthFraction <= 0.25)
 
+        // Speed cue: a cheap vignette rather than a real motion-blur pass -
+        // a post-processing chain would cost far more than this is worth.
+        // The range spans both flight models: the sim tops out around
+        // 13-19 m/s depending on airframe, arcade reaches 42, so it fades in
+        // from SPEEDLINE_MIN and saturates well inside arcade's range.
+        if (speedLinesRef.current) {
+          const t = clampPercent(((speed - SPEEDLINE_MIN) / (SPEEDLINE_MAX - SPEEDLINE_MIN)) * 100) / 100
+          speedLinesRef.current.style.opacity = String(t * 0.85)
+        }
+
+        // Cockpit grime tracks hull damage, and only shows in first person -
+        // in chase view you are looking at the aircraft, not through it.
+        if (cockpitDamageRef.current) {
+          const dirty = cameraMode === 'cockpit' ? clampPercent((1 - healthFraction) * 100) / 100 : 0
+          cockpitDamageRef.current.style.opacity = String(dirty * 0.9)
+        }
+
         if (clockRef.current) clockRef.current.textContent = clockLabel
+
+        // Compass tape: 2px per degree, translated so the current heading
+        // sits under the centre index mark.
+        if (compassTapeRef.current) {
+          compassTapeRef.current.style.transform = `translateX(${-heading * 2}px)`
+        }
+
+        // G-force: vertical load factor. 1g is level flight, so this reads
+        // like a real accelerometer rather than raw acceleration.
+        if (gForceFillRef.current && gForce != null) {
+          const span = clampPercent(((gForce + 1) / 6) * 100)
+          gForceFillRef.current.style.height = `${span}%`
+          const heavy = gForce > 2.5 || gForce < -0.5
+          gForceRowRef.current?.classList.toggle('heavy', heavy)
+          if (gForceValueRef.current) gForceValueRef.current.textContent = `${gForce.toFixed(1)}g`
+        }
+
+        // --- Free Play: wave / session timer / score multiplier ---
+        const fpPanel = freePlayPanelRef.current
+        if (fpPanel) {
+          fpPanel.hidden = !freePlay
+          if (freePlay) {
+            if (waveValueRef.current) waveValueRef.current.textContent = String(freePlay.wave)
+            if (nextWaveRef.current) {
+              nextWaveRef.current.textContent = `next ${Math.ceil(freePlay.secondsToNextWave)}s`
+            }
+            if (sessionTimeRef.current) {
+              const total = Math.floor(sessionSeconds ?? 0)
+              sessionTimeRef.current.textContent = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(
+                total % 60,
+              ).padStart(2, '0')}`
+            }
+            if (multiplierRef.current) {
+              multiplierRef.current.textContent = `x${(multiplier ?? 1).toFixed(2)}`
+              multiplierRef.current.classList.toggle('hot', (multiplier ?? 1) >= 2)
+            }
+            if (comboRef.current) {
+              comboRef.current.textContent = combo > 1 ? `${combo} COMBO` : ''
+            }
+          }
+        }
 
         // --- Gimbal targeting reticle ---
         const gimbal = gimbalRef.current
@@ -394,7 +533,14 @@ export function Hud({ hudApiRef, controlConfig }) {
           minimapCtxRef.current = minimapCanvasRef.current.getContext('2d')
         }
         if (minimapCtxRef.current && radarVisible) {
-          drawMinimap(minimapCtxRef.current, { playerX, playerZ, yaw, enemies, objectives })
+          drawMinimap(minimapCtxRef.current, {
+            playerX,
+            playerZ,
+            yaw,
+            enemies,
+            objectives,
+            palette: paletteRef.current,
+          })
         }
       },
       flashDamage() {
@@ -442,6 +588,8 @@ export function Hud({ hudApiRef, controlConfig }) {
 
   return (
     <div className="hud">
+      <div className="hud-speedlines" ref={speedLinesRef} aria-hidden="true" />
+      <div className="hud-cockpit-damage" ref={cockpitDamageRef} aria-hidden="true" />
       <div className="hud-damage-flash" ref={damageFlashRef} aria-hidden="true" />
 
       {/* Fixed gun pipper. The machine gun is hitscan straight down the
@@ -583,6 +731,68 @@ export function Hud({ hudApiRef, controlConfig }) {
       </div>
 
       <div className="hud-warning" ref={warningRef} aria-live="assertive" />
+
+      {/* Compass tape: the strip slides under the fixed centre index, the
+          way a real heading tape reads, with the numeric HDG still in the
+          instrument panel for an exact value. */}
+      <div className="hud-panel hud-compass" aria-hidden="true">
+        <div className="hud-compass-window">
+          <div className="hud-compass-tape" ref={compassTapeRef}>
+            {Array.from({ length: 73 }, (_, i) => {
+              const deg = ((i * 5) % 360 + 360) % 360
+              const major = deg % 45 === 0
+              return (
+                <span
+                  key={i}
+                  className={`hud-compass-tick${major ? ' major' : ''}`}
+                  style={{ left: `${i * 10}px` }}
+                >
+                  {major ? compassLabel(deg) : ''}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+        <span className="hud-compass-index" />
+      </div>
+
+      {/* Vertical load factor - climbs during hard pull-ups, goes negative
+          when pushing over. */}
+      <div className="hud-panel hud-gforce" ref={gForceRowRef} aria-label="G force">
+        <span className="hud-throttle-caption">G</span>
+        <div className="hud-gforce-track">
+          <div className="hud-gforce-fill" ref={gForceFillRef} />
+          <span className="hud-gforce-baseline" />
+        </div>
+        <span className="hud-gforce-value" ref={gForceValueRef}>
+          1.0g
+        </span>
+      </div>
+
+      <div className="hud-panel hud-freeplay" ref={freePlayPanelRef} aria-label="Free Play status" hidden>
+        <div className="hud-readout">
+          <span className="hud-label">WAVE</span>
+          <span className="hud-value" ref={waveValueRef}>
+            0
+          </span>
+          <span className="hud-unit" ref={nextWaveRef}>
+            next 30s
+          </span>
+        </div>
+        <div className="hud-readout">
+          <span className="hud-label">SESSION</span>
+          <span className="hud-value hud-clock" ref={sessionTimeRef}>
+            00:00
+          </span>
+        </div>
+        <div className="hud-readout">
+          <span className="hud-label">MULT</span>
+          <span className="hud-value hud-multiplier" ref={multiplierRef}>
+            x1.00
+          </span>
+          <span className="hud-unit hud-combo" ref={comboRef} />
+        </div>
+      </div>
 
       <div className="hud-panel hud-objective" ref={objectivePanelRef} aria-label="Objective" hidden>
         <span className="hud-label" ref={objectiveLabelRef}>

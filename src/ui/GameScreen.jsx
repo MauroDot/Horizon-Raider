@@ -59,7 +59,9 @@ export function GameScreen({ controlConfig, gamepadManager, audioManager }) {
     // active) isn't lost if the browser closes mid-mission. Free Play runs
     // don't get a "start" save since there's no mission progress to protect
     // yet; they're still covered by the "on run end" save below.
-    if (mission) useSaveStore.getState().saveToActiveSlot()
+    // Auto-save can be turned off in Settings > Game; the run-end save
+    // below still happens either way, so a finished run is never lost.
+    if (mission && controlConfig.settings.autoSave !== false) useSaveStore.getState().saveToActiveSlot()
 
     gameRef.current = initGame(container, {
       hudRef: hudApiRef,
@@ -111,7 +113,10 @@ export function GameScreen({ controlConfig, gamepadManager, audioManager }) {
         // high scores" persistence for players who never touch the
         // Campaign, not just the spec's literal "mission complete" case.
         useSaveStore.getState().saveToActiveSlot()
-        endRun({ ...stats, grade, difficultyId: mission ? difficultyId : null })
+        // Free Play has its own difficulty now, so this is always meaningful -
+        // it used to be nulled for non-mission runs, which meant Free Play
+        // leaderboard entries recorded no difficulty at all.
+        endRun({ ...stats, grade, difficultyId })
       },
     })
   }, [controlConfig, gamepadManager, audioManager, togglePause, endRun, recordRun])
@@ -134,6 +139,18 @@ export function GameScreen({ controlConfig, gamepadManager, audioManager }) {
     })
   }, [controlConfig, launchGame])
 
+  // Ends the run through the scene's own finish path, so the score is
+  // recorded, auto-saved and offered to the leaderboard exactly as it
+  // would be on death - "quit anytime and save score".
+  const handleQuitRun = useCallback(() => {
+    if (gameRef.current?.endRun) {
+      resume() // leave PAUSE so the results screen isn't behind the pause overlay
+      gameRef.current.endRun('quit')
+    } else {
+      goToMenu()
+    }
+  }, [resume, goToMenu])
+
   const handleRetry = useCallback(() => {
     retry()
     launchGame()
@@ -150,6 +167,7 @@ export function GameScreen({ controlConfig, gamepadManager, audioManager }) {
           gamepadManager={gamepadManager}
           audioManager={audioManager}
           onResume={resume}
+          onQuit={handleQuitRun}
         />
       )}
       {mode === GameMode.GAME_OVER && lastRunStats && (

@@ -715,3 +715,232 @@
   stroke-dasharray: 3 2.5;
   filter: drop-shadow(0 0 2px currentColor);
 }
+
+/* --- Free Play status: wave, session timer, score multiplier ----------- */
+.hud-freeplay {
+  top: 96px;
+  left: 16px;
+  display: flex;
+  gap: 18px;
+  padding: 8px 14px;
+}
+
+/* Author `display` beats the UA `[hidden]` rule - needed for the toggle. */
+.hud-freeplay[hidden] {
+  display: none;
+}
+
+.hud-freeplay .hud-value {
+  font-size: 20px;
+}
+
+.hud-multiplier {
+  color: #7fe9c0;
+  transition: color 150ms linear;
+}
+
+.hud-multiplier.hot {
+  color: #ffce54;
+  text-shadow: 0 0 8px rgba(255, 206, 84, 0.6);
+}
+
+.hud-combo {
+  color: #ffce54;
+  letter-spacing: 0.08em;
+  min-height: 1em;
+}
+
+/* Accessibility text scaling - one multiplier, applied at the panel level
+   so every readout inside scales together. */
+.hud-value,
+.hud-label,
+.hud-unit,
+.hud-comm,
+.hud-warning,
+.hud-gimbal-readout,
+.hud-controls,
+.hud-boss-name,
+.hud-boss-percent {
+  font-size: calc(var(--font-base, 1em) * var(--ui-scale, 1));
+}
+
+.hud-instruments .hud-value,
+.hud-combat .hud-value,
+.hud-freeplay .hud-value {
+  --font-base: 26px;
+}
+
+.hud-freeplay .hud-value {
+  --font-base: 20px;
+}
+
+.hud-label,
+.hud-unit {
+  --font-base: 11px;
+}
+
+/* Semantic colours so colourblind modes reach the HUD. */
+.hud-objective .hud-label,
+.hud-objective-value {
+  color: var(--c-objective);
+}
+
+.hud-health.critical .hud-health-value {
+  color: var(--c-hostile);
+}
+
+/* --- Compass heading tape ---------------------------------------------- */
+.hud-compass {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 96px;
+  width: 260px;
+  height: 26px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.hud-compass-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.hud-compass-tape {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 100%;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.hud-compass-tick {
+  position: absolute;
+  top: 5px;
+  width: 0;
+  font-size: 10px;
+  color: #9fd9c2;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.hud-compass-tick::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 1px;
+  height: 4px;
+  background: rgba(160, 220, 200, 0.5);
+}
+
+.hud-compass-tick.major {
+  color: var(--c-objective);
+  font-weight: 600;
+}
+
+.hud-compass-tick.major::before {
+  height: 8px;
+  background: var(--c-objective);
+}
+
+.hud-compass-index {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--c-friendly);
+}
+
+/* --- G-force meter ------------------------------------------------------ */
+.hud-gforce {
+  top: 260px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  width: 56px;
+}
+
+.hud-gforce-track {
+  position: relative;
+  width: 12px;
+  height: 70px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(120, 255, 200, 0.2);
+  overflow: hidden;
+}
+
+.hud-gforce-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 33%;
+  background: linear-gradient(180deg, #ffce54, #35d68f);
+  transition: height 90ms linear;
+}
+
+/* 1g reference line, at the same 1/6 offset the fill maths uses. */
+.hud-gforce-baseline {
+  position: absolute;
+  left: 0;
+  bottom: 33%;
+  width: 100%;
+  height: 1px;
+  background: rgba(215, 245, 232, 0.5);
+}
+
+.hud-gforce-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-gforce.heavy .hud-gforce-fill {
+  background: linear-gradient(180deg, #ff4d4d, #ff8a4d);
+}
+
+.hud-gforce.heavy .hud-gforce-value {
+  color: var(--c-hostile);
+}
+
+/* --- Speed lines: a cheap motion cue at high speed, no post-processing --- */
+.hud-speedlines {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0) 45%,
+    rgba(215, 245, 232, 0.16) 78%,
+    rgba(215, 245, 232, 0.32) 100%
+  );
+  transition: opacity 200ms linear;
+}
+
+html[data-reduced-motion='on'] .hud-speedlines {
+  opacity: 0 !important;
+}
+
+/* --- Cockpit damage: grime builds up on the glass as the hull degrades --- */
+.hud-cockpit-damage {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 400ms ease;
+  background:
+    radial-gradient(circle at 22% 30%, rgba(40, 20, 10, 0.5) 0 3%, rgba(0, 0, 0, 0) 9%),
+    radial-gradient(circle at 74% 24%, rgba(40, 20, 10, 0.42) 0 2%, rgba(0, 0, 0, 0) 7%),
+    radial-gradient(circle at 61% 71%, rgba(30, 16, 8, 0.45) 0 2.5%, rgba(0, 0, 0, 0) 8%),
+    radial-gradient(circle at 34% 78%, rgba(30, 16, 8, 0.38) 0 2%, rgba(0, 0, 0, 0) 6%),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(20, 8, 4, 0.45) 100%);
+}

@@ -147,6 +147,21 @@ export const DEFAULT_SETTINGS = {
   musicVolume: 0.7,
   sfxVolume: 0.8,
   audioMuted: false,
+
+  // --- Graphics (applied live by createScene.js's settings subscription) ---
+  drawDistance: 0.5, // 0..1 -> fog/camera far plane
+  shadowQuality: 'medium', // 'off' | 'low' | 'medium' | 'high'
+  particleIntensity: 1, // 0..1, scales EffectsManager's debris/flare counts
+
+  // --- Accessibility (applied to <html> by applyDisplaySettings) ---
+  textSize: 'normal', // 'normal' | 'large' | 'larger'
+  colorblindMode: 'off', // 'off' | 'deuteranopia' | 'protanopia' | 'tritanopia'
+  reducedMotion: false, // motion-sickness mode: no FOV kick, damped camera, no flash
+
+  // --- Game ---
+  defaultDifficulty: 'normal', // pre-selected for Free Play and mission briefings
+  autoSave: true,
+  showObjectiveMarkers: true,
 }
 
 const STORAGE_KEY = 'horizon-raider:controls'
