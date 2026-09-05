@@ -218,6 +218,14 @@ export function Hud({ hudApiRef, controlConfig }) {
   const minimapCanvasRef = useRef(null)
   const minimapCtxRef = useRef(null)
 
+  const gimbalRef = useRef(null)
+  const gimbalBracketsRef = useRef(null)
+  const gimbalRangeRef = useRef(null)
+  const gimbalReadoutRef = useRef(null)
+  const leadPipRef = useRef(null)
+  const wasLockedRef = useRef(false)
+  const breakLockTimeoutRef = useRef(null)
+
   const boosterSlotRefs = useRef({ shield: null, speed: null, weapon: null })
   const boosterCountRefs = useRef({ shield: null, speed: null, weapon: null })
   const bossPhaseDotRefs = useRef([])
@@ -254,6 +262,7 @@ export function Hud({ hudApiRef, controlConfig }) {
         enemies,
         objectives,
         boosters,
+        targeting,
       }) {
         if (speedRef.current) speedRef.current.textContent = (speed * 3.6).toFixed(0)
         if (altitudeRef.current) altitudeRef.current.textContent = Math.max(0, altitude).toFixed(0)
@@ -306,6 +315,51 @@ export function Hud({ hudApiRef, controlConfig }) {
         if (healthPanelRef.current) healthPanelRef.current.classList.toggle('critical', healthFraction <= 0.25)
 
         if (clockRef.current) clockRef.current.textContent = clockLabel
+
+        // --- Gimbal targeting reticle ---
+        const gimbal = gimbalRef.current
+        if (gimbal) {
+          const visible = !!targeting && targeting.onScreen
+          gimbal.hidden = !visible
+          if (visible) {
+            gimbal.style.left = `${targeting.x}%`
+            gimbal.style.top = `${targeting.y}%`
+            gimbal.classList.toggle('locked', targeting.locked)
+            // Brackets close in around a locked contact and sit wide while
+            // merely tracking - the main "do I have a lock" read.
+            if (gimbalBracketsRef.current) {
+              gimbalBracketsRef.current.style.transform = `scale(${targeting.locked ? 0.6 : 1})`
+            }
+            if (gimbalRangeRef.current) {
+              gimbalRangeRef.current.style.transform = `translateY(${(targeting.rangeFraction * 64).toFixed(1)}px)`
+            }
+            if (gimbalReadoutRef.current) {
+              gimbalReadoutRef.current.textContent = `${Math.round(targeting.distance)}m · ${String(
+                Math.round(targeting.bearing),
+              ).padStart(3, '0')}°`
+            }
+            // Losing a lock you had is worth a distinct flash, rather than
+            // the brackets just silently springing back open.
+            if (wasLockedRef.current && !targeting.locked) {
+              gimbal.classList.remove('break')
+              requestAnimationFrame(() => gimbal.classList.add('break'))
+              clearTimeout(breakLockTimeoutRef.current)
+              breakLockTimeoutRef.current = setTimeout(() => gimbal.classList.remove('break'), 450)
+            }
+          }
+          wasLockedRef.current = visible && targeting.locked
+        }
+
+        const leadPip = leadPipRef.current
+        if (leadPip) {
+          const showLead = !!targeting && targeting.onScreen && targeting.showLead
+          leadPip.hidden = !showLead
+          if (showLead) {
+            leadPip.style.left = `${targeting.leadX}%`
+            leadPip.style.top = `${targeting.leadY}%`
+            leadPip.classList.toggle('locked', targeting.locked)
+          }
+        }
 
         if (boosters) {
           for (const b of boosters) {
@@ -390,12 +444,52 @@ export function Hud({ hudApiRef, controlConfig }) {
     <div className="hud">
       <div className="hud-damage-flash" ref={damageFlashRef} aria-hidden="true" />
 
+      {/* Fixed gun pipper. The machine gun is hitscan straight down the
+          nose, so this stays dead-centre as the true aim reference - the
+          gimbal reticle below is a separate, moving target indicator. */}
       <div className="hud-crosshair" aria-hidden="true">
         <span className="tick tick-top" />
         <span className="tick tick-bottom" />
         <span className="tick tick-left" />
         <span className="tick tick-right" />
         <span className="dot" />
+      </div>
+
+      {/* Gimbal targeting reticle - driven by WeaponSystem.acquireTarget(),
+          so "locked" here is the same test the missile seeker applies. */}
+      <div className="hud-gimbal" ref={gimbalRef} aria-hidden="true" hidden>
+        <svg viewBox="0 0 120 120" className="hud-gimbal-svg">
+          <g className="gimbal-rings">
+            <path d="M46.3 22.4 A40 40 0 0 1 73.7 22.4" />
+            <path d="M97.6 46.3 A40 40 0 0 1 97.6 73.7" />
+            <path d="M73.7 97.6 A40 40 0 0 1 46.3 97.6" />
+            <path d="M22.4 73.7 A40 40 0 0 1 22.4 46.3" />
+          </g>
+          <g className="gimbal-brackets" ref={gimbalBracketsRef}>
+            <path d="M34 44 L34 34 L44 34" />
+            <path d="M76 34 L86 34 L86 44" />
+            <path d="M86 76 L86 86 L76 86" />
+            <path d="M44 86 L34 86 L34 76" />
+          </g>
+          <g className="gimbal-range">
+            <line x1="106" y1="28" x2="106" y2="92" />
+            <line x1="103" y1="28" x2="109" y2="28" />
+            <line x1="104" y1="60" x2="108" y2="60" />
+            <line x1="103" y1="92" x2="109" y2="92" />
+            <polygon className="gimbal-range-caret" ref={gimbalRangeRef} points="99,25 103,28 99,31" />
+          </g>
+          <circle className="gimbal-dot" cx="60" cy="60" r="1.8" />
+        </svg>
+        <span className="hud-gimbal-readout" ref={gimbalReadoutRef} />
+      </div>
+
+      {/* Where a crossing target will be by the time a missile reaches it. */}
+      <div className="hud-lead-pip" ref={leadPipRef} aria-hidden="true" hidden>
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="6.5" />
+          <line x1="12" y1="2" x2="12" y2="5.5" />
+          <line x1="12" y1="18.5" x2="12" y2="22" />
+        </svg>
       </div>
 
       <div className="hud-panel hud-instruments">

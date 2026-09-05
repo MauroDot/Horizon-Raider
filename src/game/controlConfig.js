@@ -137,6 +137,7 @@ export const DEFAULT_SETTINGS = {
   invertY: false,
   mouseAcceleration: false,
   cameraSmoothing: 0.5,
+  gamepadEnabled: true,
   gamepadDeadzone: 0.15,
   gamepadSensitivity: 0.5,
   triggerCurve: 'linear',

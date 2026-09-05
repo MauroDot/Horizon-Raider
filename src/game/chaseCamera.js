@@ -9,6 +9,12 @@ const GROUND_CLEARANCE = 2.5 // keeps the camera from clipping into sloped terra
 // gunner canopy front ~z=1.8) - close enough to read as "in the cockpit"
 // without the camera clipping inside the fuselage/glass geometry.
 const COCKPIT_OFFSET = new THREE.Vector3(0, 0.25, 2.7)
+// A camera looks down its own local -Z, but the helicopter's nose is +Z
+// (the established forward convention everywhere else: forward =
+// (sin(yaw), 0, cos(yaw))). Copying the airframe's orientation onto the
+// camera therefore aims it straight back down the tail boom - this half
+// turn about Y is what makes 'cockpit' actually look out the front.
+const CAMERA_FACES_NOSE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI)
 
 // Third-person chase camera (follows yaw, not pitch/roll, so the horizon
 // stays level) or first-person cockpit view (rigidly locked to the
@@ -36,7 +42,7 @@ export class ChaseCamera {
 
     if (this.mode === 'cockpit') {
       this.camera.position.copy(position).add(COCKPIT_OFFSET.clone().applyQuaternion(helicopter.quaternion))
-      this.camera.quaternion.copy(helicopter.quaternion)
+      this.camera.quaternion.copy(helicopter.quaternion).multiply(CAMERA_FACES_NOSE)
       this._initialized = false // stay un-lerped so re-toggling to chase doesn't inherit cockpit's tight follow
       return
     }

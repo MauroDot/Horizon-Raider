@@ -34,6 +34,9 @@ export class ArcadeFlightModel {
     this.speedMultiplier = speedMultiplier
     this.agilityMultiplier = agilityMultiplier
     this.boostMultiplier = 1
+    // See SimFlightModel's equivalent - per-frame input breakdown for
+    // window.__flightDebug, written in place (no per-frame allocation).
+    this.debugInputs = { kbYaw: 0, mouseYaw: 0, stickYaw: 0, yawInput: 0, forwardInput: 0, strafeInput: 0, verticalInput: 0 }
     this._groundState = { grounded: false }
     this.grounded = false
     this.groundImpactSpeed = 0
@@ -88,6 +91,15 @@ export class ArcadeFlightModel {
 
     const yawInput = THREE.MathUtils.clamp(mouseYawSpeed + stickYaw, -1, 1)
     const lookInput = THREE.MathUtils.clamp(mouseLookSpeed + stickLook, -1, 1)
+
+    const dbg = this.debugInputs
+    dbg.kbYaw = 0 // arcade has no keyboard yaw binding - the mouse/stick steer
+    dbg.mouseYaw = mouseYawSpeed
+    dbg.stickYaw = stickYaw
+    dbg.yawInput = yawInput
+    dbg.forwardInput = forwardInput
+    dbg.strafeInput = strafeInput
+    dbg.verticalInput = verticalInput
 
     const yawMaxRate = YAW_MAX_RATE * this.agilityMultiplier
     const effectiveSpeedMultiplier = this.speedMultiplier * this.boostMultiplier

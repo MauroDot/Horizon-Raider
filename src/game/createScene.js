@@ -8,7 +8,7 @@ import { ArcadeFlightModel } from './flightModel/arcadeFlightModel.js'
 import { ChaseCamera } from './chaseCamera.js'
 import { EnemyManager } from './enemies/EnemyManager.js'
 import { EnemyWeaponSystem } from './enemies/EnemyWeaponSystem.js'
-import { WeaponSystem } from './weapons/WeaponSystem.js'
+import { WeaponSystem, MISSILE_LOCK_RANGE_M } from './weapons/WeaponSystem.js'
 import { getLoadout } from './loadouts.js'
 import { getHelicopter, resolveWeaponUpgrades } from './helicopters.js'
 import { BoosterController } from './boosterController.js'
@@ -647,6 +647,92 @@ export function initGame(
       }
     }
 
+    // --- Targeting reticle ---
+    // Reads the weapon's own acquisition (WeaponSystem.acquireTarget) so the
+    // reticle can never claim a lock the missile seeker wouldn't actually
+    // take, then projects the contact into screen space for the HUD overlay.
+    let targeting = null
+    const acquired = playerHealth.alive ? weapons.acquireTarget() : null
+    if (acquired) {
+      // project() needs an up-to-date view matrix; the renderer only
+      // refreshes it during render(), which happens after this - without
+      // this the reticle would trail the target by a frame.
+      camera.updateMatrixWorld()
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
+
+      const toScreen = (worldPos) => {
+        const p = worldPos.clone().project(camera)
+        return { x: (p.x * 0.5 + 0.5) * 100, y: (-p.y * 0.5 + 0.5) * 100, inFront: p.z < 1 }
+      }
+      const onTarget = toScreen(acquired.enemy.mesh.position)
+      const onLead = toScreen(acquired.leadPoint)
+      const dx = acquired.enemy.mesh.position.x - flightModel.position.x
+      const dz = acquired.enemy.mesh.position.z - flightModel.position.z
+
+      targeting = {
+        locked: acquired.locked,
+        distance: acquired.distance,
+        // 0 = on top of us, 1 = at the edge of the seeker's envelope
+        rangeFraction: THREE.MathUtils.clamp(acquired.distance / MISSILE_LOCK_RANGE_M, 0, 1),
+        // Same compass convention as the HUD's HDG readout.
+        bearing: THREE.MathUtils.euclideanModulo(THREE.MathUtils.radToDeg(-Math.atan2(dx, dz)), 360),
+        x: onTarget.x,
+        y: onTarget.y,
+        onScreen: onTarget.inFront && onTarget.x > -8 && onTarget.x < 108 && onTarget.y > -8 && onTarget.y < 108,
+        leadX: onLead.x,
+        leadY: onLead.y,
+        // Only worth drawing once it's visibly apart from the target itself.
+        showLead: onLead.inFront && Math.hypot(onLead.x - onTarget.x, onLead.y - onTarget.y) > 1.2,
+      }
+    }
+
+    // Live input/flight diagnostics for debugging control problems (a
+    // stuck key, a drifting gamepad stick, unexpected mouse yaw). Read it
+    // from the browser console: `window.__flightDebug`, or watch it with
+    // `setInterval(() => console.log(JSON.stringify(window.__flightDebug)), 500)`.
+    // Written in place, no allocation beyond the two small arrays.
+    if (typeof window !== 'undefined') {
+      const dbg = flightModel.debugInputs ?? {}
+      window.__flightDebug = {
+        scheme,
+        keysHeld: [...input.keys],
+        mouseButtonsHeld: [...input.mouseButtons],
+        pointerLocked: frameInput.pointerLocked,
+        inputMethod: frameInput.inputMethod,
+        gamepadConnected: frameInput.gamepadConnected,
+        pad: frameInput.pad
+          ? {
+              leftX: +frameInput.pad.leftX.toFixed(4),
+              leftY: +frameInput.pad.leftY.toFixed(4),
+              rightX: +frameInput.pad.rightX.toFixed(4),
+              rightY: +frameInput.pad.rightY.toFixed(4),
+              mapping: frameInput.pad.mapping,
+              id: frameInput.pad.id,
+              rawAxes: frameInput.pad.rawAxes,
+            }
+          : null,
+        mouseDX: frameInput.mouseDX,
+        mouseDY: frameInput.mouseDY,
+        actionsActive: Object.keys(frameInput.actions).filter((k) => frameInput.actions[k]),
+        yawFrom: { keyboard: +(dbg.kbYaw ?? 0).toFixed(4), mouse: +(dbg.mouseYaw ?? 0).toFixed(4), gamepad: +(dbg.stickYaw ?? 0).toFixed(4) },
+        yawInput: +(dbg.yawInput ?? 0).toFixed(4),
+        yaw: +flightModel.yaw.toFixed(4),
+        yawRate: +flightModel.yawRate.toFixed(4),
+        pitch: +(flightModel.pitch ?? flightModel.visualPitch ?? 0).toFixed(4),
+        roll: +(flightModel.roll ?? flightModel.visualRoll ?? 0).toFixed(4),
+        position: {
+          x: +flightModel.position.x.toFixed(2),
+          y: +flightModel.position.y.toFixed(2),
+          z: +flightModel.position.z.toFixed(2),
+        },
+        velocity: {
+          x: +flightModel.velocity.x.toFixed(3),
+          y: +flightModel.velocity.y.toFixed(3),
+          z: +flightModel.velocity.z.toFixed(3),
+        },
+      }
+    }
+
     hudRef?.current?.update({
       speed: flightModel.speed,
       altitude: flightModel.altitude,
@@ -705,6 +791,7 @@ export function initGame(
           }
         : null,
       boosters: boosters.snapshot(),
+      targeting,
       ...score.snapshot(),
     })
 

@@ -290,16 +290,67 @@ function AudioSettingsView({ controlConfig, audioManager, onBack }) {
 
 function ControllerSettingsView({ controlConfig, gamepadManager }) {
   const s = controlConfig.settings
-  const GAMEPAD_SETTING_KEY = { gamepadDeadzone: 'deadzone', gamepadSensitivity: 'sensitivity' }
+  const GAMEPAD_SETTING_KEY = {
+    gamepadDeadzone: 'deadzone',
+    gamepadSensitivity: 'sensitivity',
+    gamepadEnabled: 'enabled',
+  }
   const set = (key, value) => {
     controlConfig.updateSetting(key, value)
     gamepadManager?.updateSettings({ [GAMEPAD_SETTING_KEY[key] ?? key]: value })
   }
+  // Live axis readout while this screen is open. A stick that reads
+  // non-zero here with your hands off the controller is exactly what makes
+  // the aircraft turn on its own - the numbers make that immediately
+  // visible instead of something you have to infer from the flying.
+  const [pad, setPad] = useState(null)
+  useEffect(() => {
+    const id = setInterval(() => setPad(gamepadManager?.poll() ?? null), 200)
+    return () => clearInterval(id)
+  }, [gamepadManager])
+  const drifting = pad && (Math.abs(pad.leftX) > 0.02 || Math.abs(pad.leftY) > 0.02 || Math.abs(pad.rightX) > 0.02 || Math.abs(pad.rightY) > 0.02)
+
   return (
     <div className="game-menu-controller-settings">
       <p className="game-menu-note">
         {gamepadManager?.connected ? 'Controller connected.' : 'No controller detected - connect one and press a button.'}
       </p>
+
+      {pad && (
+        <div className="game-menu-note">
+          <div>
+            Live sticks - L({pad.leftX.toFixed(2)}, {pad.leftY.toFixed(2)}) R({pad.rightX.toFixed(2)},{' '}
+            {pad.rightY.toFixed(2)})
+          </div>
+          {gamepadManager?.nonStandardMapping && (
+            <div style={{ color: '#ffce54' }}>
+              Non-standard controller layout - stick axes are ignored for flight (buttons still work), because there
+              is no reliable way to tell a stick axis from a throttle or trigger on this device.
+            </div>
+          )}
+          {drifting && !gamepadManager?.nonStandardMapping && (
+            <div style={{ color: '#ff6a5a' }}>
+              Sticks are not centred. With your hands off the controller, press Recalibrate - otherwise this offset
+              is read as a constant steering input and the aircraft will turn on its own.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="game-menu-preset-row">
+        <span>Ignore controller</span>
+        <input
+          type="checkbox"
+          checked={!s.gamepadEnabled}
+          onChange={(e) => set('gamepadEnabled', !e.target.checked)}
+        />
+      </div>
+      <div className="game-menu-preset-row">
+        <span>Stick centre</span>
+        <button type="button" onClick={() => gamepadManager?.recalibrate()}>
+          Recalibrate
+        </button>
+      </div>
       <div className="game-menu-slider-list">
         <Slider label="Dead Zone" value={s.gamepadDeadzone} min={0.05} max={0.3} onChange={(v) => set('gamepadDeadzone', v)} />
         <Slider label="Stick Sensitivity" value={s.gamepadSensitivity} onChange={(v) => set('gamepadSensitivity', v)} />

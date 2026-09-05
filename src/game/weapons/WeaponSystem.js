@@ -18,6 +18,7 @@ const MISSILE_LOCK_RANGE = 240
 const MISSILE_TRIGGER_MARGIN = 1.6
 const MISSILE_TRAIL_INTERVAL = 0.05
 const MISSILE_MUZZLE_OFFSET = new THREE.Vector3(0, -0.35, 0.8)
+export const MISSILE_LOCK_RANGE_M = MISSILE_LOCK_RANGE
 export const MISSILE_MAX_AMMO = 8 // the "standard" loadout's capacity - see loadouts.js
 const MISSILE_REGEN_INTERVAL = 4 // seconds per reclaimed missile
 
@@ -152,6 +153,62 @@ export class WeaponSystem {
     }
   }
 
+  // The missile seeker's target pick, exposed so the HUD's targeting
+  // reticle can display the *actual* weapon state rather than a parallel
+  // guess that could drift out of sync with it.
+  //
+  // Returns null when nothing is in range, otherwise:
+  //   { enemy, distance, locked, leadPoint }
+  // `locked: true` means the seeker would take this target right now (in
+  // range AND inside the lock cone) - that's the same test _fireMissile()
+  // applies. `locked: false` is the nearest in-range contact, which the
+  // reticle can still track without claiming a lock.
+  //
+  // `leadPoint` is where the target will be once a missile could reach it
+  // (its current horizontal velocity x missile flight time). Note the
+  // machine gun is hitscan and missiles home, so neither strictly *needs*
+  // lead - it's an aiming aid for pointing the nose at a crossing target,
+  // not a ballistic solution.
+  acquireTarget() {
+    const forward = this._worldForward()
+    const origin = this.helicopter.position
+
+    let locked = null
+    let lockedDist = Infinity
+    let nearest = null
+    let nearestDist = Infinity
+
+    for (const enemy of this.enemyManager.getAliveEnemies()) {
+      const toEnemy = enemy.mesh.position.clone().sub(origin)
+      const dist = toEnemy.length()
+      if (dist === 0 || dist > MISSILE_LOCK_RANGE) continue
+      if (dist < nearestDist) {
+        nearestDist = dist
+        nearest = enemy
+      }
+      if (toEnemy.angleTo(forward) <= MISSILE_LOCK_CONE && dist < lockedDist) {
+        lockedDist = dist
+        locked = enemy
+      }
+    }
+
+    const enemy = locked ?? nearest
+    if (!enemy) return null
+    const distance = locked ? lockedDist : nearestDist
+
+    // EnemyManager tracks heading+speed rather than a velocity vector.
+    const flightTime = distance / MISSILE_SPEED
+    const leadPoint = enemy.mesh.position
+      .clone()
+      .add(
+        new THREE.Vector3(Math.sin(enemy.heading), 0, Math.cos(enemy.heading)).multiplyScalar(
+          (enemy.speed ?? 0) * flightTime,
+        ),
+      )
+
+    return { enemy, distance, locked: !!locked, leadPoint }
+  }
+
   _fireMissile() {
     this.audioManager?.playSfx('missileFire')
     const forward = this._worldForward()
@@ -159,18 +216,10 @@ export class WeaponSystem {
       .clone()
       .add(MISSILE_MUZZLE_OFFSET.clone().applyQuaternion(this.helicopter.quaternion))
 
-    let target = null
-    let bestDist = Infinity
-    for (const enemy of this.enemyManager.getAliveEnemies()) {
-      const toEnemy = enemy.mesh.position.clone().sub(muzzle)
-      const dist = toEnemy.length()
-      if (dist > MISSILE_LOCK_RANGE || dist === 0) continue
-      if (toEnemy.angleTo(forward) > MISSILE_LOCK_CONE) continue
-      if (dist < bestDist) {
-        bestDist = dist
-        target = enemy
-      }
-    }
+    // Same acquisition the HUD reticle reads - a missile only actually
+    // locks on when the reticle says it has.
+    const acquired = this.acquireTarget()
+    const target = acquired?.locked ? acquired.enemy : null
 
     const mesh = createMissileMesh()
     mesh.position.copy(muzzle)

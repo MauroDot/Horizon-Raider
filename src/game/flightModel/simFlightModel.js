@@ -45,6 +45,12 @@ export class SimFlightModel {
     this.speedMultiplier = speedMultiplier
     this.agilityMultiplier = agilityMultiplier
     this.boostMultiplier = 1
+    // Per-frame breakdown of what each input source contributed, for the
+    // in-game input diagnostics (window.__flightDebug - see createScene.js).
+    // Written in place every update() so a stuck key or a drifting gamepad
+    // stick can be told apart from mouse look at a glance, rather than only
+    // seeing the single summed number that reaches the physics.
+    this.debugInputs = { kbYaw: 0, mouseYaw: 0, stickYaw: 0, yawInput: 0, pitchInput: 0, rollInput: 0, throttleInput: 0 }
     this._groundState = { grounded: false }
     this.grounded = false
     this.groundImpactSpeed = 0
@@ -116,6 +122,15 @@ export class SimFlightModel {
     const rollInput = THREE.MathUtils.clamp(kbRoll + stickRoll, -1, 1)
     const yawInput = THREE.MathUtils.clamp(kbYaw + mouseYaw + stickYaw, -1, 1)
     const throttleInput = THREE.MathUtils.clamp(kbThrottle + triggerThrottle, -1, 1)
+
+    const dbg = this.debugInputs
+    dbg.kbYaw = kbYaw
+    dbg.mouseYaw = mouseYaw
+    dbg.stickYaw = stickYaw
+    dbg.yawInput = yawInput
+    dbg.pitchInput = pitchInput
+    dbg.rollInput = rollInput
+    dbg.throttleInput = throttleInput
 
     this.throttle = THREE.MathUtils.clamp(this.throttle + throttleInput * THROTTLE_RATE * delta, 0, 1)
 

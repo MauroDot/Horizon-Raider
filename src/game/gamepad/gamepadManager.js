@@ -23,6 +23,10 @@ export const BUTTON = {
 const DEFAULT_DEADZONE = 0.15
 const DEFAULT_SENSITIVITY = 0.5
 
+function clamp11(v) {
+  return Math.max(-1, Math.min(1, v))
+}
+
 function applyDeadzone(value, deadzone) {
   const magnitude = Math.abs(value)
   if (magnitude < deadzone) return 0
@@ -40,18 +44,28 @@ export class GamepadManager {
     sensitivity = DEFAULT_SENSITIVITY,
     triggerCurve = 'linear',
     vibration = 1,
+    enabled = true,
   } = {}) {
     this.deadzone = deadzone
     this.sensitivity = sensitivity
     this.triggerCurve = triggerCurve
     this.vibration = vibration
+    this.enabled = enabled
     this.index = null
     this.connected = false
     this.lastActiveAt = 0
+    // Resting value of each axis, captured on the first poll after a
+    // connect and subtracted from every later reading. Without this, a worn
+    // stick that rests at 0.2 (or a non-standard pad whose axes[2] is a
+    // trigger resting at -1) sails straight past the deadzone and reads as
+    // permanent, un-cancellable yaw input - the aircraft just spins.
+    this._neutral = null
+    this.nonStandardMapping = false
 
     this._connectionListeners = new Set()
     this._onConnect = (e) => {
       if (this.index == null) this.index = e.gamepad.index
+      this._neutral = null // recalibrate against the new device's resting position
       this.connected = true
       this._notify(true, e.gamepad)
     }
@@ -65,11 +79,18 @@ export class GamepadManager {
     window.addEventListener('gamepaddisconnected', this._onDisconnect)
   }
 
-  updateSettings({ deadzone, sensitivity, triggerCurve, vibration } = {}) {
+  updateSettings({ deadzone, sensitivity, triggerCurve, vibration, enabled } = {}) {
+    if (enabled != null) this.enabled = enabled
     if (deadzone != null) this.deadzone = deadzone
     if (sensitivity != null) this.sensitivity = sensitivity
     if (triggerCurve != null) this.triggerCurve = triggerCurve
     if (vibration != null) this.vibration = vibration
+  }
+
+  // Re-samples the resting axis positions on the next poll - for the
+  // Settings screen's "Recalibrate" button (let go of the sticks first).
+  recalibrate() {
+    this._neutral = null
   }
 
   onConnectionChange(listener) {
@@ -90,7 +111,7 @@ export class GamepadManager {
   // applied), a button/dpad boolean array, and raw button objects for
   // callers that need press-strength (not used yet, kept for headroom).
   poll() {
-    if (this.index == null) return null
+    if (!this.enabled || this.index == null) return null
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []
     const pad = pads[this.index]
     if (!pad) {
@@ -99,12 +120,28 @@ export class GamepadManager {
     }
     this.connected = true
 
+    // Axis indices 0-3 only mean left-stick-X/Y, right-stick-X/Y under the
+    // W3C *standard* mapping. On a pad the browser reports as non-standard
+    // (mapping: ''), axes[2] is just as likely to be a throttle slider or a
+    // trigger - and those often rest at a hard -1/+1, which would read as a
+    // permanent full-deflection stick input. There's no way to guess the
+    // real layout, so sticks are ignored entirely for those devices; buttons
+    // still work, since those require a deliberate press.
+    this.nonStandardMapping = pad.mapping !== 'standard'
+
+    // Calibrate the resting position once per connected device, then treat
+    // that as zero. Fixes stick drift (and any axis that idles off-centre).
+    if (!this._neutral) this._neutral = Array.from(pad.axes, (v) => v ?? 0)
+    const centred = (i) => (pad.axes[i] ?? 0) - (this._neutral[i] ?? 0)
+
     const dz = this.deadzone
     const sens = this.sensitivity * 2 // 50% (default) -> 1x, so the slider reads naturally
-    const leftX = applyDeadzone(pad.axes[0] ?? 0, dz) * sens
-    const leftY = applyDeadzone(pad.axes[1] ?? 0, dz) * sens
-    const rightX = applyDeadzone(pad.axes[2] ?? 0, dz) * sens
-    const rightY = applyDeadzone(pad.axes[3] ?? 0, dz) * sens
+    const stick = (i) =>
+      this.nonStandardMapping ? 0 : clamp11(applyDeadzone(centred(i), dz) * sens)
+    const leftX = stick(0)
+    const leftY = stick(1)
+    const rightX = stick(2)
+    const rightY = stick(3)
     const leftTrigger = this._shapeTrigger(pad.buttons[BUTTON.LT]?.value ?? 0)
     const rightTrigger = this._shapeTrigger(pad.buttons[BUTTON.RT]?.value ?? 0)
 
@@ -114,7 +151,18 @@ export class GamepadManager {
       Math.abs(leftX) + Math.abs(leftY) + Math.abs(rightX) + Math.abs(rightY) + leftTrigger + rightTrigger > 0.02
     if (active) this.lastActiveAt = performance.now()
 
-    return { leftX, leftY, rightX, rightY, leftTrigger, rightTrigger, buttons }
+    return {
+      leftX,
+      leftY,
+      rightX,
+      rightY,
+      leftTrigger,
+      rightTrigger,
+      buttons,
+      mapping: pad.mapping || 'non-standard',
+      id: pad.id,
+      rawAxes: Array.from(pad.axes, (v) => +(v ?? 0).toFixed(3)),
+    }
   }
 
   rumble(strength = 1, durationMs = 150) {

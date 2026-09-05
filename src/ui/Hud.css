@@ -572,3 +572,146 @@
     border-radius: 10px;
   }
 }
+
+/* --- Gimbal targeting reticle -------------------------------------------
+   Positioned in viewport percentages from createScene's world->screen
+   projection of the tracked contact. The fixed .hud-crosshair pipper stays
+   centred as the gun's true aim point; this is a separate moving target
+   indicator, so neither has to lie about where rounds actually go. */
+.hud-gimbal {
+  position: absolute;
+  display: block;
+  width: 120px;
+  height: 120px;
+  margin-left: -60px;
+  margin-top: -60px;
+  color: #4ff0e0;
+  transition: color 120ms linear;
+}
+
+/* An author `display` beats the UA's `[hidden] { display: none }` rule
+   regardless of specificity, so toggling `.hidden` needs this explicitly -
+   same trap the objective panel hit. */
+.hud-gimbal[hidden],
+.hud-lead-pip[hidden] {
+  display: none;
+}
+
+.hud-gimbal.locked {
+  color: #ff4436;
+}
+
+.hud-gimbal-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+.gimbal-rings {
+  stroke-width: 1.6;
+  opacity: 0.9;
+  transform-origin: 60px 60px;
+  animation: gimbal-spin 14s linear infinite;
+}
+
+/* Locked: the rings spin up rather than freezing - reads as actively
+   tracking instead of stalled. */
+.hud-gimbal.locked .gimbal-rings {
+  animation-duration: 3s;
+}
+
+@keyframes gimbal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gimbal-brackets {
+  stroke-width: 2.2;
+  transform-origin: 60px 60px;
+  transition: transform 140ms ease-out;
+}
+
+.gimbal-range {
+  stroke-width: 1.2;
+  opacity: 0.75;
+}
+
+.gimbal-range-caret {
+  fill: currentColor;
+  stroke: none;
+  transition: transform 120ms linear;
+}
+
+.gimbal-dot {
+  fill: currentColor;
+  stroke: none;
+}
+
+.hud-gimbal-readout {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: currentColor;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.hud-gimbal.locked .hud-gimbal-readout {
+  color: #ffce54;
+}
+
+/* Lock lost: kick the brackets back open with a flash, so a break reads as
+   an event rather than the reticle quietly relaxing. */
+.hud-gimbal.break .gimbal-brackets {
+  animation: gimbal-break 0.45s ease-out;
+}
+
+@keyframes gimbal-break {
+  0% {
+    stroke: #ffce54;
+    transform: scale(0.6);
+  }
+  40% {
+    stroke: #ffce54;
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Where a crossing target will be by the time a missile arrives. */
+.hud-lead-pip {
+  position: absolute;
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -12px;
+  color: #4ff0e0;
+  opacity: 0.75;
+}
+
+.hud-lead-pip.locked {
+  color: #ffce54;
+}
+
+.hud-lead-pip svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-dasharray: 3 2.5;
+  filter: drop-shadow(0 0 2px currentColor);
+}

@@ -42,7 +42,14 @@ export class AudioManager {
   }
 
   _ensureContext() {
-    if (this.ctx) return true
+    // A *closed* context is not reusable - every node built on it is inert
+    // (the browser warns "not useful when context is closed"). dispose()
+    // can legitimately run while the manager itself lives on (React
+    // StrictMode replays mount/unmount in dev against this same app-lifetime
+    // singleton), so treat "closed" as "needs rebuilding" rather than
+    // trusting a non-null ctx.
+    if (this.ctx && this.ctx.state !== 'closed') return true
+    if (this.ctx) this._resetGraph()
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext
       if (!Ctx) return false
@@ -64,18 +71,26 @@ export class AudioManager {
   // call this from the first click/keydown handler (same pattern as
   // engineSound.js's start()).
   resume() {
+    this._ensureContext()
     this.ctx?.resume().catch(() => {})
   }
 
+  // These three hand out live nodes for other synths (engineSound.js,
+  // bossMusic.js) to route through the shared master/music/sfx buses, so
+  // they each ensure the graph exists rather than handing back a stale
+  // node from a context that has since been closed.
   getContext() {
+    this._ensureContext()
     return this.ctx
   }
 
   getMusicBus() {
+    this._ensureContext()
     return this.musicGain
   }
 
   getSfxBus() {
+    this._ensureContext()
     return this.sfxGain
   }
 
@@ -279,5 +294,58 @@ export class AudioManager {
     }
     this._activeVoices.clear()
     this.ctx?.close().catch(() => {})
+    // Drop the graph so a later use rebuilds it instead of quietly
+    // attaching new nodes to a closed context (which is silent, not an
+    // error - exactly the kind of failure that looks like "audio is broken"
+    // with nothing in the console).
+    this._resetGraph()
+  }
+
+  // Forgets the audio graph without touching the buffer cache - decoded
+  // buffers stay valid to re-bind onto a fresh context.
+  _resetGraph() {
+    this.ctx = null
+    this.masterGain = null
+    this.musicGain = null
+    this.sfxGain = null
+    this._music = null
+    this._activeVoices.clear()
+  }
+
+  // Console-friendly health check: is the context actually running, what
+  // are the real gain values, and which manifest entries have loaded /
+  // failed / not been tried yet. `await window.__audioManager.diagnose()`
+  diagnose() {
+    const status = (basePath) =>
+      !this._bufferCache.has(basePath)
+        ? 'not-yet-requested'
+        : this._bufferCache.get(basePath)
+          ? 'loaded'
+          : 'MISSING/undecodable'
+    const music = Object.fromEntries(
+      Object.entries(MUSIC_MANIFEST).map(([k, v]) => [k, status(v.base)]),
+    )
+    const sfx = Object.fromEntries(Object.entries(SFX_MANIFEST).map(([k, v]) => [k, status(v)]))
+    const report = {
+      contextState: this.ctx?.state ?? 'no context',
+      sampleRate: this.ctx?.sampleRate ?? null,
+      gains: {
+        master: this.masterGain?.gain.value ?? null,
+        music: this.musicGain?.gain.value ?? null,
+        sfx: this.sfxGain?.gain.value ?? null,
+      },
+      settings: {
+        masterVolume: this._masterVolume,
+        musicVolume: this._musicVolume,
+        sfxVolume: this._sfxVolume,
+        muted: this._muted,
+      },
+      currentMusic: this._music?.key ?? null,
+      music,
+      sfx,
+    }
+    console.table({ ...music, ...sfx })
+    console.log('[audio] diagnose:', report)
+    return report
   }
 }

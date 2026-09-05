@@ -18,6 +18,7 @@ function App() {
   const [gamepadManager] = useState(
     () =>
       new GamepadManager({
+        enabled: controlConfig.settings.gamepadEnabled,
         deadzone: controlConfig.settings.gamepadDeadzone,
         sensitivity: controlConfig.settings.gamepadSensitivity,
         triggerCurve: controlConfig.settings.triggerCurve,
